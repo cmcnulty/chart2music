@@ -42,7 +42,7 @@
         "lint-staged": "lint-staged",
         "lint-check": "eslint --quiet src/ && prettier --config .prettierrc.json src/**/*.ts --check",
         "format": "eslint src/ --fix && prettier --config .prettierrc.json src/**/*.ts --write && prettier examples/**/*.js --write",
-        "prepare": "husky install",
+        "prepare": "npm run build",
         "test": "jest"
     },
     "license": "MIT",
