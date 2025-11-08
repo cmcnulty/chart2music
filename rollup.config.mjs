@@ -5,6 +5,8 @@ import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 // Modified from: https://gist.github.com/rikkit/b636076740dfaa864ce9ee8ae389b81c#file-tsconfig-json
 
+const isWatchMode = process.env.ROLLUP_WATCH === 'true';
+
 export default [
     {
         input: "src/entryPoint.ts",
@@ -36,6 +38,9 @@ export default [
                 plugins: []
             }
         ],
-        plugins: [dts(), del({ targets: "dist/*.d.ts", hook: "buildEnd" })]
+        plugins: [
+            dts(),
+            ...(isWatchMode ? [] : [del({ targets: ["dist/*.d.ts", "!dist/index.d.ts"], hook: "buildEnd" })])
+        ]
     }
 ];
