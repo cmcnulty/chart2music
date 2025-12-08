@@ -782,6 +782,7 @@ export class c2m {
             if (rowFilter && !rowFilter(row, rowIndex)) {
                 return;
             }
+            const groupName = this._groups[rowIndex];
             row.forEach((cell) => {
                 if (!isSimpleDataPoint(cell)) {
                     return;
