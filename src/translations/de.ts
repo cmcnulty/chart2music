@@ -123,7 +123,8 @@ const dictionary: translationDict = {
     "stat-outlier": "Ausreisser",
 
     "point-xy": "{x}, {y}",
-    "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
+    "point-xy-label":
+        "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
     "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
     "point-outlier": "{x}, {y}, {index} von {count}",
     "point-xhl": "{x}, {high} - {low}",
