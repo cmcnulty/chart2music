@@ -108,30 +108,16 @@ export class TranslationManager {
             return intercepted;
         }
 
-        // Filter out non-primitive values (like stackBreakdown array) for ICU MessageFormat
-        // Custom callbacks receive the full evaluators object, but formatMessage only accepts primitives
-        const primitiveEvaluators: Record<string, string | number | boolean> =
-            {};
-        for (const [key, value] of Object.entries(evaluators)) {
-            if (
-                typeof value === "string" ||
-                typeof value === "number" ||
-                typeof value === "boolean"
-            ) {
-                primitiveEvaluators[key] = value;
-            }
-        }
-
         if (id in translations[this._language]) {
             return this._loadedLanguages
                 .get(this._language)
-                .formatMessage({ id }, primitiveEvaluators);
+                .formatMessage({ id }, evaluators);
         }
 
         if (id in translations[DEFAULT_LANGUAGE]) {
             return this._loadedLanguages
                 .get(DEFAULT_LANGUAGE)
-                .formatMessage({ id }, primitiveEvaluators);
+                .formatMessage({ id }, evaluators);
         }
 
         return "";
