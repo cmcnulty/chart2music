@@ -116,6 +116,8 @@ type c2mOptions = {
     hertzes?: number[];
     stack?: boolean;
     root?: null | string;
+    announcePointLabelFirst?: boolean;
+    playOnCategoryChange?: boolean;
     translationCallback?: ({ language, id, evaluators }: translationCallbackOptions) => string | false;
     modifyHelpDialogText?: (lang: string, text: string) => string;
     modifyHelpDialogKeyboardListing?: (lang: string, headers: string[], shortcuts: string[][]) => string[][];

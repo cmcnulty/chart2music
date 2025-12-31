@@ -451,36 +451,43 @@ var c2mChart = (function () {
         return Math.max(...values);
     };
     const defaultFormat = (value) => `${value}`;
-    const generatePointDescription = ({ point, xFormat = defaultFormat, yFormat = defaultFormat, stat, outlierIndex = null, announcePointLabelFirst = false, translationCallback }) => {
+    const generatePointDescription = ({ point, xFormat = defaultFormat, yFormat = defaultFormat, stat, outlierIndex = null, announcePointLabelFirst = false, translationCallback, pointIndex, groupIndex }) => {
+        const withIndices = (evaluators) => {
+            return {
+                ...evaluators,
+                ...(typeof pointIndex === "number" && { pointIndex }),
+                ...(typeof groupIndex === "number" && { groupIndex })
+            };
+        };
         if (isOHLCDataPoint(point)) {
             if (typeof stat !== "undefined") {
-                return translationCallback("point-xy", {
+                return translationCallback("point-xy", withIndices({
                     x: xFormat(point.x),
                     y: yFormat(point[stat])
-                });
+                }));
             }
-            return translationCallback("point-xohlc", {
+            return translationCallback("point-xohlc", withIndices({
                 x: xFormat(point.x),
                 open: yFormat(point.open),
                 high: yFormat(point.high),
                 low: yFormat(point.low),
                 close: yFormat(point.close)
-            });
+            }));
         }
         if (isBoxDataPoint(point) && outlierIndex !== null) {
-            return translationCallback("point-outlier", {
+            return translationCallback("point-outlier", withIndices({
                 x: xFormat(point.x),
                 y: point.outlier.at(outlierIndex),
                 index: outlierIndex + 1,
                 count: point.outlier.length
-            });
+            }));
         }
         if (isBoxDataPoint(point) || isHighLowDataPoint(point)) {
             if (typeof stat !== "undefined") {
-                return translationCallback("point-xy", {
+                return translationCallback("point-xy", withIndices({
                     x: xFormat(point.x),
                     y: yFormat(point[stat])
-                });
+                }));
             }
             const { x, high, low } = point;
             const formattedPoint = {
@@ -489,30 +496,32 @@ var c2mChart = (function () {
                 low: yFormat(low)
             };
             if ("outlier" in point && point.outlier?.length > 0) {
-                return translationCallback("point-xhl-outlier", {
+                return translationCallback("point-xhl-outlier", withIndices({
                     ...formattedPoint,
                     count: point.outlier.length
-                });
+                }));
             }
-            return translationCallback("point-xhl", formattedPoint);
+            return translationCallback("point-xhl", withIndices(formattedPoint));
         }
         if (isSimpleDataPoint(point)) {
-            const details = [xFormat(point.x), yFormat(point.y)];
-            if (point.label) {
-                if (announcePointLabelFirst) {
-                    details.unshift(point.label);
-                }
-                else {
-                    details.push(point.label);
-                }
+            if (!point.label) {
+                return translationCallback("point-xy", withIndices({
+                    x: xFormat(point.x),
+                    y: yFormat(point.y)
+                }));
             }
-            return details.join(", ");
+            return translationCallback("point-xy-label", withIndices({
+                x: xFormat(point.x),
+                y: yFormat(point.y),
+                label: point.label,
+                announcePointLabelFirst
+            }));
         }
         if (isAlternateAxisDataPoint(point)) {
-            return translationCallback("point-xy", {
+            return translationCallback("point-xy", withIndices({
                 x: xFormat(point.x),
                 y: yFormat(point.y2)
-            });
+            }));
         }
         return "";
     };
@@ -5539,12 +5548,13 @@ var c2mChart = (function () {
         "stat-q3": "Q3",
         "stat-outlier": "Outlier",
         "point-xy": "{x}, {y}",
+        "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
         "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
         "point-outlier": "{x}, {y}, {index} of {count}",
         "point-xhl": "{x}, {high} - {low}",
-        "point-xhl-outlier": `{x}, {high} - {low}, with {count, plural, 
-        =0 {no outliers} 
-        one {{count} outlier} 
+        "point-xhl-outlier": `{x}, {high} - {low}, with {count, plural,
+        =0 {no outliers}
+        one {{count} outlier}
         other {{count} outliers}
     }`,
         "info-open": "Open info dialog",
@@ -5730,12 +5740,13 @@ var c2mChart = (function () {
         "stat-q3": "Q3",
         "stat-outlier": "Ausreisser",
         "point-xy": "{x}, {y}",
+        "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
         "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
         "point-outlier": "{x}, {y}, {index} von {count}",
         "point-xhl": "{x}, {high} - {low}",
-        "point-xhl-outlier": `{x}, {high} - {low}, mit {count, plural, 
-        =0 {keinem Ausreisser} 
-        one {{count} Ausreisser} 
+        "point-xhl-outlier": `{x}, {high} - {low}, mit {count, plural,
+        =0 {keinem Ausreisser}
+        one {{count} Ausreisser}
         other {{count} Ausreissern}
     }`,
         "info-open": "Info öffnen",
@@ -5889,12 +5900,13 @@ var c2mChart = (function () {
         "stat-q3": "Q3",
         "stat-outlier": "Valor Atípico",
         "point-xy": "{x}, {y}",
+        "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
         "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
         "point-outlier": "{x}, {y}, {index} de {count}",
         "point-xhl": "{x}, {high} - {low}",
-        "point-xhl-outlier": `{x}, {high} - {low}, con {count, plural, 
-        =0 {Sin valores atípicos} 
-        one {{count} valor atípico} 
+        "point-xhl-outlier": `{x}, {high} - {low}, con {count, plural,
+        =0 {Sin valores atípicos}
+        one {{count} valor atípico}
         other {{count} valores atípicos}
     }`,
         "info-open": "Abrir info",
@@ -6048,6 +6060,7 @@ var c2mChart = (function () {
         "stat-q3": "Q3",
         "stat-outlier": "Valeur aberrante",
         "point-xy": "{x}, {y}",
+        "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
         "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
         "point-outlier": "{x}, {y}, {index} de {count}",
         "point-xhl": "{x}, {high} - {low}",
@@ -6207,12 +6220,13 @@ var c2mChart = (function () {
         "stat-q3": "Q3",
         "stat-outlier": "Outlier",
         "point-xy": "{x}, {y}",
+        "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
         "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
         "point-outlier": "{x}, {y}, {index} di {count}",
         "point-xhl": "{x}, {high} - {low}",
-        "point-xhl-outlier": `{x}, {high} - {low}, con {count, plural, 
-        =0 {nessun outlier} 
-        one {{count} outlier} 
+        "point-xhl-outlier": `{x}, {high} - {low}, con {count, plural,
+        =0 {nessun outlier}
+        one {{count} outlier}
         other {{count} outlier}
     }`,
         "info-open": "Apri info",
@@ -6366,6 +6380,7 @@ var c2mChart = (function () {
         "stat-q3": "Q3",
         "stat-outlier": "Tawm txawv",
         "point-xy": "{x}, {y}",
+        "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
         "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
         "point-outlier": "{x}, {y}, {index} ntawm {count}",
         "point-xhl": "{x}, {high} - {low}",
@@ -6501,6 +6516,11 @@ var c2mChart = (function () {
             }
             this._loadedLanguages.set(code, createIntl({
                 locale: code,
+                onError: (...args) => {
+                    if (args[0].code === "MISSING_DATA") {
+                        return;
+                    }
+                },
                 messages: translations[code]
             }));
             return true;
@@ -7038,6 +7058,10 @@ var c2mChart = (function () {
                     this._translator.intercepterCallback =
                         input.options.translationCallback;
                 }
+                if (input.options.announcePointLabelFirst !== undefined) {
+                    this._announcePointLabelFirst =
+                        input.options.announcePointLabelFirst;
+                }
             }
             prepChartElement({
                 elem: this._chartElement,
@@ -7465,8 +7489,11 @@ var c2mChart = (function () {
                     freqTable[cell.x] += cell.y;
                 });
             });
-            return Object.entries(freqTable).map(([x, y]) => {
-                return { x: Number(x), y };
+            return Object.entries(freqTable).map(([x, total]) => {
+                return {
+                    x: Number(x),
+                    y: total
+                };
             });
         }
         _buildStackBar() {
@@ -8563,7 +8590,9 @@ var c2mChart = (function () {
                 }),
                 stat: availableStats[statIndex],
                 outlierIndex: this._outlierMode ? this._outlierIndex : null,
-                announcePointLabelFirst: this._announcePointLabelFirst
+                announcePointLabelFirst: this._announcePointLabelFirst,
+                pointIndex: this._pointIndex,
+                groupIndex: this._groupIndex
             });
             const text = filteredJoin([
                 this._flagNewLevel && this._currentGroupName,
