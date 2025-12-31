@@ -114,10 +114,6 @@ const dictionary: translationDict = {
     "point-xy": "{x}, {y}",
     "point-xy-label":
         "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
-    "point-xy-stack": "{x}, {y}, kev faib: {stackBreakdownFormatted}",
-    "point-xy-label-stack":
-        "{announcePointLabelFirst, select, true {{label}, {x}, {y}, kev faib: {stackBreakdownFormatted}} other {{x}, {y}, {label}, kev faib: {stackBreakdownFormatted}}}",
-    "stack-item": "{group}: {value}",
     "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
     "point-outlier": "{x}, {y}, {index} ntawm {count}",
     "point-xhl": "{x}, {high} - {low}",

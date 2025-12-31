@@ -11,7 +11,7 @@ import {
     isSimpleDataPoint,
     isBoxDataPoint
 } from "./dataPoint";
-import type { translateEvaluators, StackBreakdownItem } from "./translations";
+import type { translateEvaluators } from "./translations";
 import type {
     AxisData,
     StatBundle,
@@ -193,45 +193,6 @@ export const calculateAxisMaximum = ({
 
 export const defaultFormat = (value: number) => `${value}`;
 
-/**
- * Format stack breakdown metadata into a string for screen readers using translation templates
- * @param breakdown - the stack breakdown metadata
- * @param yFormat - formatter for y-axis values
- * @param translationCallback - translation function for formatting items
- * @param language - current language for locale-aware list formatting
- * @returns formatted string describing the breakdown
- */
-export const formatStackBreakdown = (
-    breakdown: StackBreakdownItem[] | undefined,
-    yFormat: AxisData["format"] = defaultFormat,
-    translationCallback: (
-        code: string,
-        evaluators?: translateEvaluators
-    ) => string,
-    language = "en"
-): string => {
-    if (!breakdown || breakdown.length === 0) {
-        return "";
-    }
-
-    // Format each item using translation template (language-specific item format)
-    const formattedItems = breakdown.map(({ group, value }) =>
-        translationCallback("stack-item", {
-            group,
-            value: yFormat(value)
-        })
-    );
-
-    // Use Intl.ListFormat for locale-aware list joining
-    // This handles language-specific separators, conjunctions, etc.
-    const listFormatter = new Intl.ListFormat(language, {
-        style: "long",
-        type: "unit" // Use "unit" for comma-separated without "and" at the end
-    });
-
-    return listFormatter.format(formattedItems);
-};
-
 export const generatePointDescription = ({
     point,
     xFormat = defaultFormat,
@@ -240,7 +201,8 @@ export const generatePointDescription = ({
     outlierIndex = null,
     announcePointLabelFirst = false,
     translationCallback,
-    language = "en"
+    pointIndex,
+    groupIndex
 }: {
     point: SupportedDataPointType;
     xFormat?: AxisData["format"];
@@ -252,40 +214,64 @@ export const generatePointDescription = ({
         code: string,
         evaluators?: translateEvaluators
     ) => string;
-    language?: string;
+    pointIndex?: number;
+    groupIndex?: number;
 }) => {
+    // Helper to add indices to evaluators
+    const withIndices = (
+        evaluators: translateEvaluators
+    ): translateEvaluators => {
+        return {
+            ...evaluators,
+            ...(typeof pointIndex === "number" && { pointIndex }),
+            ...(typeof groupIndex === "number" && { groupIndex })
+        };
+    };
+
     if (isOHLCDataPoint(point)) {
         if (typeof stat !== "undefined") {
-            return translationCallback("point-xy", {
-                x: xFormat(point.x),
-                y: yFormat(point[stat as keyof OHLCDataPoint] as number)
-            });
+            return translationCallback(
+                "point-xy",
+                withIndices({
+                    x: xFormat(point.x),
+                    y: yFormat(point[stat as keyof OHLCDataPoint] as number)
+                })
+            );
         }
-        return translationCallback("point-xohlc", {
-            x: xFormat(point.x),
-            open: yFormat(point.open),
-            high: yFormat(point.high),
-            low: yFormat(point.low),
-            close: yFormat(point.close)
-        });
+        return translationCallback(
+            "point-xohlc",
+            withIndices({
+                x: xFormat(point.x),
+                open: yFormat(point.open),
+                high: yFormat(point.high),
+                low: yFormat(point.low),
+                close: yFormat(point.close)
+            })
+        );
     }
 
     if (isBoxDataPoint(point) && outlierIndex !== null) {
-        return translationCallback("point-outlier", {
-            x: xFormat(point.x),
-            y: point.outlier.at(outlierIndex),
-            index: outlierIndex + 1,
-            count: point.outlier.length
-        });
+        return translationCallback(
+            "point-outlier",
+            withIndices({
+                x: xFormat(point.x),
+                y: point.outlier.at(outlierIndex),
+                index: outlierIndex + 1,
+                count: point.outlier.length
+            })
+        );
     }
 
     if (isBoxDataPoint(point) || isHighLowDataPoint(point)) {
         if (typeof stat !== "undefined") {
-            return translationCallback("point-xy", {
-                x: xFormat(point.x),
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-                y: yFormat(point[stat])
-            });
+            return translationCallback(
+                "point-xy",
+                withIndices({
+                    x: xFormat(point.x),
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                    y: yFormat(point[stat])
+                })
+            );
         }
 
         const { x, high, low } = point;
@@ -296,68 +282,50 @@ export const generatePointDescription = ({
         };
 
         if ("outlier" in point && point.outlier?.length > 0) {
-            return translationCallback("point-xhl-outlier", {
-                ...formattedPoint,
-                count: point.outlier.length
-            });
+            return translationCallback(
+                "point-xhl-outlier",
+                withIndices({
+                    ...formattedPoint,
+                    count: point.outlier.length
+                })
+            );
         }
 
-        return translationCallback("point-xhl", formattedPoint);
+        return translationCallback("point-xhl", withIndices(formattedPoint));
     }
 
     if (isSimpleDataPoint(point)) {
-        // Prepare stack breakdown if present (both raw and formatted versions)
-        const hasStackBreakdown =
-            point._stackBreakdown && point._stackBreakdown.length > 0;
-        const stackBreakdownFormatted = hasStackBreakdown
-            ? formatStackBreakdown(
-                  point._stackBreakdown,
-                  yFormat,
-                  translationCallback,
-                  language
-              )
-            : "";
-
         // Fast path: simple point without a label
         if (!point.label) {
-            if (hasStackBreakdown) {
-                return translationCallback("point-xy-stack", {
+            return translationCallback(
+                "point-xy",
+                withIndices({
                     x: xFormat(point.x),
-                    y: yFormat(point.y),
-                    stackBreakdown: point._stackBreakdown,
-                    stackBreakdownFormatted
-                });
-            }
-            return translationCallback("point-xy", {
-                x: xFormat(point.x),
-                y: yFormat(point.y)
-            });
+                    y: yFormat(point.y)
+                })
+            );
         }
 
         // Point with label: use point-xy-label template
-        if (hasStackBreakdown) {
-            return translationCallback("point-xy-label-stack", {
+        return translationCallback(
+            "point-xy-label",
+            withIndices({
                 x: xFormat(point.x),
                 y: yFormat(point.y),
                 label: point.label,
-                announcePointLabelFirst,
-                stackBreakdown: point._stackBreakdown,
-                stackBreakdownFormatted
-            });
-        }
-        return translationCallback("point-xy-label", {
-            x: xFormat(point.x),
-            y: yFormat(point.y),
-            label: point.label,
-            announcePointLabelFirst
-        });
+                announcePointLabelFirst
+            })
+        );
     }
 
     if (isAlternateAxisDataPoint(point)) {
-        return translationCallback("point-xy", {
-            x: xFormat(point.x),
-            y: yFormat(point.y2)
-        });
+        return translationCallback(
+            "point-xy",
+            withIndices({
+                x: xFormat(point.x),
+                y: yFormat(point.y2)
+            })
+        );
     }
 
     return "";

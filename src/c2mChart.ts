@@ -44,11 +44,7 @@ import {
     isOHLCDataPoint,
     isSimpleDataPoint
 } from "./dataPoint";
-import type {
-    SupportedDataPointType,
-    SimpleDataPoint,
-    StackBreakdownItem
-} from "./dataPoint";
+import type { SupportedDataPointType, SimpleDataPoint } from "./dataPoint";
 import { launchOptionDialog } from "./optionDialog";
 import { launchInfoDialog } from "./infoDialog";
 import { AudioNotificationType } from "./audio/AudioEngine";
@@ -777,34 +773,25 @@ export class c2m {
     private _createFrequencyTable(
         rowFilter?: (row: SupportedDataPointType[], rowIndex: number) => boolean
     ): SimpleDataPoint[] {
-        const freqTable: Record<
-            number,
-            { total: number; breakdown: StackBreakdownItem[] }
-        > = {};
+        const freqTable: Record<number, number> = {};
         this._data.forEach((row, rowIndex) => {
             if (rowFilter && !rowFilter(row, rowIndex)) {
                 return;
             }
-            const groupName = this._groups[rowIndex];
             row.forEach((cell) => {
                 if (!isSimpleDataPoint(cell)) {
                     return;
                 }
                 if (!(cell.x in freqTable)) {
-                    freqTable[cell.x] = { total: 0, breakdown: [] };
+                    freqTable[cell.x] = 0;
                 }
-                freqTable[cell.x].total += cell.y;
-                freqTable[cell.x].breakdown.push({
-                    group: groupName,
-                    value: cell.y
-                });
+                freqTable[cell.x] += cell.y;
             });
         });
-        return Object.entries(freqTable).map(([x, data]) => {
+        return Object.entries(freqTable).map(([x, total]) => {
             return {
                 x: Number(x),
-                y: data.total,
-                _stackBreakdown: data.breakdown
+                y: total
             } as SimpleDataPoint;
         });
     }
@@ -2414,7 +2401,8 @@ export class c2m {
             stat: availableStats[statIndex],
             outlierIndex: this._outlierMode ? this._outlierIndex : null,
             announcePointLabelFirst: this._announcePointLabelFirst,
-            language: this._translator.language
+            pointIndex: this._pointIndex,
+            groupIndex: this._groupIndex
         });
 
         const text = filteredJoin(
