@@ -1,6 +1,8 @@
 import { c2mChart } from "../src/c2mChart";
 import type { SimpleDataPoint } from "../src/dataPoint";
 import { StarTrekEpisodeRatings, StartTrekEpisodeRatingsX } from "./_test_data";
+import { MockAudioEngine } from "./_mockAudioEngine";
+import { hertzes } from "./_constants";
 
 jest.useFakeTimers();
 window.AudioContext = jest.fn().mockImplementation(() => {
@@ -1368,5 +1370,231 @@ test("Grouped scatter plot", () => {
                 index: 10
             }
         }
+    });
+});
+
+describe("playOnCategoryChange option", () => {
+    test("Plays audio and speaks point when navigating categories with option enabled", () => {
+        const audioEngine = new MockAudioEngine();
+        const mockElement = document.createElement("div");
+        const mockElementCC = document.createElement("div");
+        const { err } = c2mChart({
+            type: "line",
+            data: {
+                a: [
+                    { x: 1, y: 1 },
+                    { x: 2, y: 2 },
+                    { x: 3, y: 3 }
+                ],
+                b: [
+                    { x: 1, y: 11 },
+                    { x: 2, y: 12 },
+                    { x: 3, y: 13 }
+                ],
+                c: [
+                    { x: 1, y: 7 },
+                    { x: 2, y: 8 },
+                    { x: 3, y: 9 }
+                ]
+            },
+            element: mockElement,
+            cc: mockElementCC,
+            audioEngine,
+            options: {
+                playOnCategoryChange: true,
+                hertzes
+            }
+        });
+        expect(err).toBe(null);
+
+        mockElement.dispatchEvent(new Event("focus"));
+
+        const initialPlayCount = audioEngine.playCount;
+
+        // Navigate to next category with PageDown
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "PageDown"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Audio should have played
+        expect(audioEngine.playCount).toBe(initialPlayCount + 1);
+        // Point value should be spoken
+        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
+            "1, 11"
+        );
+
+        const afterNextPlayCount = audioEngine.playCount;
+
+        // Navigate to previous category with PageUp
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "PageUp"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Audio should have played again
+        expect(audioEngine.playCount).toBe(afterNextPlayCount + 1);
+        // Point value should be spoken
+        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
+            "1, 1"
+        );
+    });
+
+    test("Does not play audio when navigating categories without option (default)", () => {
+        const audioEngine = new MockAudioEngine();
+        const mockElement = document.createElement("div");
+        const mockElementCC = document.createElement("div");
+        const { err } = c2mChart({
+            type: "line",
+            data: {
+                a: [
+                    { x: 1, y: 1 },
+                    { x: 2, y: 2 },
+                    { x: 3, y: 3 }
+                ],
+                b: [
+                    { x: 1, y: 11 },
+                    { x: 2, y: 12 },
+                    { x: 3, y: 13 }
+                ],
+                c: [
+                    { x: 1, y: 7 },
+                    { x: 2, y: 8 },
+                    { x: 3, y: 9 }
+                ]
+            },
+            element: mockElement,
+            cc: mockElementCC,
+            audioEngine,
+            options: {
+                hertzes
+            }
+        });
+        expect(err).toBe(null);
+
+        mockElement.dispatchEvent(new Event("focus"));
+
+        const initialPlayCount = audioEngine.playCount;
+
+        // Navigate to next category with PageDown
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "PageDown"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Audio should NOT have played (only announcement, no tone)
+        expect(audioEngine.playCount).toBe(initialPlayCount);
+
+        // Navigate to previous category with PageUp
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "PageUp"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Audio should still NOT have played
+        expect(audioEngine.playCount).toBe(initialPlayCount);
+    });
+
+    test("Does not play audio during programmatic category changes (respects _silent flag)", () => {
+        const audioEngine = new MockAudioEngine();
+        const mockElement = document.createElement("div");
+        const mockElementCC = document.createElement("div");
+        const { err, data: chart } = c2mChart({
+            type: "line",
+            data: {
+                a: [
+                    { x: 1, y: 1 },
+                    { x: 2, y: 2 },
+                    { x: 3, y: 3 }
+                ],
+                b: [
+                    { x: 1, y: 11 },
+                    { x: 2, y: 12 },
+                    { x: 3, y: 13 }
+                ],
+                c: [
+                    { x: 1, y: 7 },
+                    { x: 2, y: 8 },
+                    { x: 3, y: 9 }
+                ]
+            },
+            element: mockElement,
+            cc: mockElementCC,
+            audioEngine,
+            options: {
+                playOnCategoryChange: true,
+                hertzes
+            }
+        });
+        expect(err).toBe(null);
+
+        mockElement.dispatchEvent(new Event("focus"));
+
+        const initialPlayCount = audioEngine.playCount;
+
+        // Programmatically change category visibility (triggers internal navigation with _silent flag)
+        chart?.setCategoryVisibility("b", false);
+        jest.advanceTimersByTime(250);
+
+        // Audio should NOT have played because _silent flag is set during programmatic changes
+        expect(audioEngine.playCount).toBe(initialPlayCount);
+    });
+
+    test("Does not play audio when enableSound is false", () => {
+        const audioEngine = new MockAudioEngine();
+        const mockElement = document.createElement("div");
+        const mockElementCC = document.createElement("div");
+        const { err } = c2mChart({
+            type: "line",
+            data: {
+                a: [
+                    { x: 1, y: 1 },
+                    { x: 2, y: 2 },
+                    { x: 3, y: 3 }
+                ],
+                b: [
+                    { x: 1, y: 11 },
+                    { x: 2, y: 12 },
+                    { x: 3, y: 13 }
+                ],
+                c: [
+                    { x: 1, y: 7 },
+                    { x: 2, y: 8 },
+                    { x: 3, y: 9 }
+                ]
+            },
+            element: mockElement,
+            cc: mockElementCC,
+            audioEngine,
+            options: {
+                playOnCategoryChange: true,
+                enableSound: false,
+                hertzes
+            }
+        });
+        expect(err).toBe(null);
+
+        mockElement.dispatchEvent(new Event("focus"));
+
+        const initialPlayCount = audioEngine.playCount;
+
+        // Navigate to next category with PageDown
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "PageDown"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Audio should NOT have played because enableSound is false
+        expect(audioEngine.playCount).toBe(initialPlayCount);
     });
 });

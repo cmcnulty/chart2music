@@ -235,6 +235,7 @@ export type c2mOptions = {
     stack?: boolean;
     root?: null | string;
     announcePointLabelFirst?: boolean;
+    playOnCategoryChange?: boolean;
     translationCallback?: ({
         language,
         id,

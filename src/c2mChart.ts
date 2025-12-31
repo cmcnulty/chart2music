@@ -186,6 +186,7 @@ export class c2m {
         [key in ActionSet]: () => void;
     };
     private _silent = false;
+    private _playOnCategoryChange = false;
     private _outlierIndex = 0;
     private _outlierMode = false;
     private _announcePointLabelFirst = false;
@@ -248,6 +249,10 @@ export class c2m {
             if (input.options.announcePointLabelFirst !== undefined) {
                 this._announcePointLabelFirst =
                     input.options.announcePointLabelFirst;
+            }
+
+            if (input.options.playOnCategoryChange) {
+                this._playOnCategoryChange = input.options.playOnCategoryChange;
             }
         }
 
@@ -486,6 +491,12 @@ export class c2m {
 
                 this._announceCategoryChange();
                 this._cleanupAfterCategoryChange(currentX);
+
+                // Play tone and speak point if option enabled
+                if (this._playOnCategoryChange && !this._silent) {
+                    this._playAndSpeak();
+                }
+
                 this._onFocus();
             },
             next_category: () => {
@@ -501,6 +512,12 @@ export class c2m {
 
                 this._announceCategoryChange();
                 this._cleanupAfterCategoryChange(currentX);
+
+                // Play tone and speak point if option enabled
+                if (this._playOnCategoryChange && !this._silent) {
+                    this._playAndSpeak();
+                }
+
                 this._onFocus();
             },
             first_category: () => {
