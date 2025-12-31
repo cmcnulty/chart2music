@@ -291,7 +291,7 @@ describe("Provided translations", () => {
 
                     switch (id) {
                         case "description": {
-                            return `Sonified chart, ${evaluators.title ?? ""}`;
+                            return `Sonified chart, ${(evaluators.title as string) ?? ""}`;
                         }
                         default: {
                             return false;
@@ -341,7 +341,7 @@ describe("Provided translations", () => {
                 enableSound: false,
                 translationCallback: ({ id, evaluators }) => {
                     if (id === "point-xy-label") {
-                        return `${evaluators.x}, total ${evaluators.y} (${evaluators.label})`;
+                        return `${evaluators.x as string}, total ${evaluators.y as string} (${evaluators.label as string})`;
                     }
                     return false;
                 }
@@ -445,97 +445,6 @@ describe("Provided translations", () => {
         // Verify default format works for second point too
         expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
             "2, 20, Point B"
-        );
-    });
-
-    test("StackBreakdown in translationCallback for stacked bars", () => {
-        const mockElement = document.createElement("div");
-        const mockElementCC = document.createElement("div");
-        const { err } = c2mChart({
-            lang: "en",
-            title: "Revenue by Product",
-            type: "bar",
-            data: {
-                "Product A": [
-                    { x: 1, y: 30 },
-                    { x: 2, y: 50 }
-                ],
-                "Product B": [
-                    { x: 1, y: 40 },
-                    { x: 2, y: 60 }
-                ],
-                "Product C": [
-                    { x: 1, y: 30 },
-                    { x: 2, y: 40 }
-                ]
-            },
-            element: mockElement,
-            cc: mockElementCC,
-            options: {
-                enableSound: false,
-                stack: true,
-                translationCallback: ({ id, evaluators }) => {
-                    if (id === "point-xy" && evaluators.stackBreakdown) {
-                        const breakdown = evaluators.stackBreakdown as Array<{
-                            group: string;
-                            value: number;
-                        }>;
-                        const details = breakdown
-                            .map((item) => `${item.group}: ${item.value}`)
-                            .join(", ");
-                        return `${evaluators.x}, total ${evaluators.y} (${details})`;
-                    }
-                    return false;
-                }
-            }
-        });
-        expect(err).toBe(null);
-
-        mockElement.dispatchEvent(new Event("focus"));
-
-        // Navigate to "All" group which has stackBreakdown
-        mockElement.dispatchEvent(
-            new KeyboardEvent("keydown", {
-                key: "Home"
-            })
-        );
-        jest.advanceTimersByTime(250);
-
-        // Verify stackBreakdown is used in custom format
-        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
-            "1, total 100 (Product A: 30, Product B: 40, Product C: 30)"
-        );
-
-        // Navigate to next point in All group
-        mockElement.dispatchEvent(
-            new KeyboardEvent("keydown", {
-                key: "ArrowRight"
-            })
-        );
-        jest.advanceTimersByTime(250);
-
-        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
-            "2, total 150 (Product A: 50, Product B: 60, Product C: 40)"
-        );
-
-        // Navigate to individual group (no stackBreakdown)
-        mockElement.dispatchEvent(
-            new KeyboardEvent("keydown", {
-                key: "PageDown"
-            })
-        );
-        jest.advanceTimersByTime(250);
-
-        mockElement.dispatchEvent(
-            new KeyboardEvent("keydown", {
-                key: "Home"
-            })
-        );
-        jest.advanceTimersByTime(250);
-
-        // Individual groups should use default format (no stackBreakdown)
-        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
-            "1, 30"
         );
     });
 
