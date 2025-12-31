@@ -11,7 +11,7 @@ import {
     isSimpleDataPoint,
     isBoxDataPoint
 } from "./dataPoint";
-import type { translateEvaluators } from "./translations";
+import type { translateEvaluators, StackBreakdownItem } from "./translations";
 import type {
     AxisData,
     StatBundle,
@@ -193,6 +193,45 @@ export const calculateAxisMaximum = ({
 
 export const defaultFormat = (value: number) => `${value}`;
 
+/**
+ * Format stack breakdown metadata into a string for screen readers using translation templates
+ * @param breakdown - the stack breakdown metadata
+ * @param yFormat - formatter for y-axis values
+ * @param translationCallback - translation function for formatting items
+ * @param language - current language for locale-aware list formatting
+ * @returns formatted string describing the breakdown
+ */
+export const formatStackBreakdown = (
+    breakdown: StackBreakdownItem[] | undefined,
+    yFormat: AxisData["format"] = defaultFormat,
+    translationCallback: (
+        code: string,
+        evaluators?: translateEvaluators
+    ) => string,
+    language = "en"
+): string => {
+    if (!breakdown || breakdown.length === 0) {
+        return "";
+    }
+
+    // Format each item using translation template (language-specific item format)
+    const formattedItems = breakdown.map(({ group, value }) =>
+        translationCallback("stack-item", {
+            group,
+            value: yFormat(value)
+        })
+    );
+
+    // Use Intl.ListFormat for locale-aware list joining
+    // This handles language-specific separators, conjunctions, etc.
+    const listFormatter = new Intl.ListFormat(language, {
+        style: "long",
+        type: "unit" // Use "unit" for comma-separated without "and" at the end
+    });
+
+    return listFormatter.format(formattedItems);
+};
+
 export const generatePointDescription = ({
     point,
     xFormat = defaultFormat,
@@ -200,7 +239,8 @@ export const generatePointDescription = ({
     stat,
     outlierIndex = null,
     announcePointLabelFirst = false,
-    translationCallback
+    translationCallback,
+    language = "en"
 }: {
     point: SupportedDataPointType;
     xFormat?: AxisData["format"];
@@ -212,6 +252,7 @@ export const generatePointDescription = ({
         code: string,
         evaluators?: translateEvaluators
     ) => string;
+    language?: string;
 }) => {
     if (isOHLCDataPoint(point)) {
         if (typeof stat !== "undefined") {
@@ -265,26 +306,50 @@ export const generatePointDescription = ({
     }
 
     if (isSimpleDataPoint(point)) {
+        // Prepare stack breakdown if present (both raw and formatted versions)
+        const hasStackBreakdown =
+            point._stackBreakdown && point._stackBreakdown.length > 0;
+        const stackBreakdownFormatted = hasStackBreakdown
+            ? formatStackBreakdown(
+                  point._stackBreakdown,
+                  yFormat,
+                  translationCallback,
+                  language
+              )
+            : "";
+
         // Fast path: simple point without a label
         if (!point.label) {
+            if (hasStackBreakdown) {
+                return translationCallback("point-xy-stack", {
+                    x: xFormat(point.x),
+                    y: yFormat(point.y),
+                    stackBreakdown: point._stackBreakdown,
+                    stackBreakdownFormatted
+                });
+            }
             return translationCallback("point-xy", {
                 x: xFormat(point.x),
-                y: yFormat(point.y),
-                ...(point._stackBreakdown && {
-                    stackBreakdown: point._stackBreakdown
-                })
+                y: yFormat(point.y)
             });
         }
 
         // Point with label: use point-xy-label template
+        if (hasStackBreakdown) {
+            return translationCallback("point-xy-label-stack", {
+                x: xFormat(point.x),
+                y: yFormat(point.y),
+                label: point.label,
+                announcePointLabelFirst,
+                stackBreakdown: point._stackBreakdown,
+                stackBreakdownFormatted
+            });
+        }
         return translationCallback("point-xy-label", {
             x: xFormat(point.x),
             y: yFormat(point.y),
             label: point.label,
-            announcePointLabelFirst,
-            ...(point._stackBreakdown && {
-                stackBreakdown: point._stackBreakdown
-            })
+            announcePointLabelFirst
         });
     }
 

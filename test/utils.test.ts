@@ -1,4 +1,4 @@
-import type { SimpleDataPoint } from "../src/dataPoint";
+import type { SimpleDataPoint, StackBreakdownItem } from "../src/dataPoint";
 import { TranslationManager } from "../src/translator";
 import {
     calcPan,
@@ -12,7 +12,8 @@ import {
     generateAxisSummary,
     convertDataRow,
     detectIfMobile,
-    formatWrapper
+    formatWrapper,
+    formatStackBreakdown
 } from "../src/utils";
 
 const english = new TranslationManager("en");
@@ -472,6 +473,104 @@ describe("utils", () => {
                 translationCallback: (id, ev) => english.translate(id, ev)
             })
         ).toBe("0, 23, 2 of 2");
+    });
+
+    test("generatePointDescription - stack breakdown without label", () => {
+        const point: SimpleDataPoint = {
+            x: 1,
+            y: 100,
+            _stackBreakdown: [
+                { group: "A", value: 30 },
+                { group: "B", value: 70 }
+            ]
+        };
+        const result = generatePointDescription({
+            point,
+            translationCallback: (id, ev) => english.translate(id, ev),
+            language: "en"
+        });
+        expect(result).toContain("1");
+        expect(result).toContain("100");
+        expect(result).toContain("breakdown");
+        expect(result).toContain("A");
+        expect(result).toContain("B");
+    });
+
+    test("generatePointDescription - stack breakdown with label", () => {
+        const point: SimpleDataPoint = {
+            x: 1,
+            y: 100,
+            label: "Q1",
+            _stackBreakdown: [
+                { group: "North", value: 40 },
+                { group: "South", value: 60 }
+            ]
+        };
+        const result = generatePointDescription({
+            point,
+            translationCallback: (id, ev) => english.translate(id, ev),
+            language: "en"
+        });
+        expect(result).toContain("1");
+        expect(result).toContain("100");
+        expect(result).toContain("Q1");
+        expect(result).toContain("breakdown");
+        expect(result).toContain("North");
+        expect(result).toContain("South");
+    });
+
+    test("generatePointDescription - empty stack breakdown", () => {
+        const point: SimpleDataPoint = {
+            x: 1,
+            y: 50,
+            _stackBreakdown: []
+        };
+        const result = generatePointDescription({
+            point,
+            translationCallback: (id, ev) => english.translate(id, ev),
+            language: "en"
+        });
+        // Should use normal template, not stack template
+        expect(result).toBe("1, 50");
+        expect(result).not.toContain("breakdown");
+    });
+
+    test("generatePointDescription - undefined stack breakdown", () => {
+        const point: SimpleDataPoint = {
+            x: 2,
+            y: 75
+        };
+        const result = generatePointDescription({
+            point,
+            translationCallback: (id, ev) => english.translate(id, ev),
+            language: "en"
+        });
+        // Should use normal template, not stack template
+        expect(result).toBe("2, 75");
+        expect(result).not.toContain("breakdown");
+    });
+
+    test("formatStackBreakdown - returns empty string for undefined breakdown", () => {
+        let undefinedBreakdown: StackBreakdownItem[] | undefined;
+        let undefinedYFormat: ((num: number) => string) | undefined;
+        const result = formatStackBreakdown(
+            undefinedBreakdown,
+            undefinedYFormat,
+            (id, ev) => english.translate(id, ev),
+            "en"
+        );
+        expect(result).toBe("");
+    });
+
+    test("formatStackBreakdown - returns empty string for empty array", () => {
+        let undefinedYFormat: ((num: number) => string) | undefined;
+        const result = formatStackBreakdown(
+            [],
+            undefinedYFormat,
+            (id, ev) => english.translate(id, ev),
+            "en"
+        );
+        expect(result).toBe("");
     });
 
     test("Calculate metadata by group", () => {

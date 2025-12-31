@@ -1,12 +1,6 @@
-/**
- * Breakdown of a stacked bar/data point showing which groups contributed to the total
- */
-export interface StackBreakdownItem {
-    /** The name of the group */
-    group: string;
-    /** The value contributed by this group */
-    value: number;
-}
+import type { StackBreakdownItem } from "./translations";
+
+export type { StackBreakdownItem };
 
 /**
  * The base of all data points.

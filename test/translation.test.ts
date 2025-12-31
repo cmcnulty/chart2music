@@ -291,7 +291,7 @@ describe("Provided translations", () => {
 
                     switch (id) {
                         case "description": {
-                            return `Sonified chart, ${evaluators.title ?? ""}`;
+                            return `Sonified chart, ${(evaluators.title as string) ?? ""}`;
                         }
                         default: {
                             return false;
@@ -341,7 +341,7 @@ describe("Provided translations", () => {
                 enableSound: false,
                 translationCallback: ({ id, evaluators }) => {
                     if (id === "point-xy-label") {
-                        return `${evaluators.x}, total ${evaluators.y} (${evaluators.label})`;
+                        return `${evaluators.x as string}, total ${evaluators.y as string} (${evaluators.label as string})`;
                     }
                     return false;
                 }
@@ -475,7 +475,10 @@ describe("Provided translations", () => {
                 enableSound: false,
                 stack: true,
                 translationCallback: ({ id, evaluators }) => {
-                    if (id === "point-xy" && evaluators.stackBreakdown) {
+                    if (
+                        (id === "point-xy" || id === "point-xy-stack") &&
+                        evaluators.stackBreakdown
+                    ) {
                         const breakdown = evaluators.stackBreakdown as Array<{
                             group: string;
                             value: number;
@@ -483,7 +486,7 @@ describe("Provided translations", () => {
                         const details = breakdown
                             .map((item) => `${item.group}: ${item.value}`)
                             .join(", ");
-                        return `${evaluators.x}, total ${evaluators.y} (${details})`;
+                        return `${evaluators.x as string}, total ${evaluators.y as string} (${details})`;
                     }
                     return false;
                 }
@@ -537,6 +540,72 @@ describe("Provided translations", () => {
         expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
             "1, 30"
         );
+    });
+
+    test("StackBreakdown with labeled points", () => {
+        const mockElement = document.createElement("div");
+        const mockElementCC = document.createElement("div");
+        const { err } = c2mChart({
+            lang: "en",
+            title: "Sales by Quarter",
+            type: "bar",
+            data: {
+                North: [
+                    { x: 1, y: 100, label: "Q1" },
+                    { x: 2, y: 120, label: "Q2" }
+                ],
+                South: [
+                    { x: 1, y: 80, label: "Q1" },
+                    { x: 2, y: 90, label: "Q2" }
+                ]
+            },
+            element: mockElement,
+            cc: mockElementCC,
+            options: {
+                enableSound: false,
+                stack: true
+            }
+        });
+        expect(err).toBe(null);
+
+        mockElement.dispatchEvent(new Event("focus"));
+
+        // Navigate to "All" group which has stackBreakdown AND labels
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "Home"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Should format the stack breakdown (labels aren't preserved in the "All" group)
+        const text = mockElementCC.lastElementChild?.textContent?.trim();
+        expect(text).toContain("1");
+        expect(text).toContain("180");
+        expect(text).toContain("breakdown:");
+        expect(text).toContain("North");
+        expect(text).toContain("South");
+
+        // Navigate to individual group to test labeled point without stack breakdown
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "PageDown"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        mockElement.dispatchEvent(
+            new KeyboardEvent("keydown", {
+                key: "Home"
+            })
+        );
+        jest.advanceTimersByTime(250);
+
+        // Individual group point should show label but no breakdown
+        const labeledText = mockElementCC.lastElementChild?.textContent?.trim();
+        expect(labeledText).toContain("Q1");
+        expect(labeledText).toContain("1");
+        expect(labeledText).toContain("100");
     });
 
     test("announcePointLabelFirst puts label at the beginning", () => {

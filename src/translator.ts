@@ -78,6 +78,12 @@ export class TranslationManager {
             code,
             createIntl({
                 locale: code,
+                onError: (...args) => {
+                    // Suppress missing translation errors
+                    if ((args[0].code as string) === "MISSING_DATA") {
+                        return;
+                    }
+                },
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 messages: translations[code]
             })
@@ -102,16 +108,30 @@ export class TranslationManager {
             return intercepted;
         }
 
+        // Filter out non-primitive values (like stackBreakdown array) for ICU MessageFormat
+        // Custom callbacks receive the full evaluators object, but formatMessage only accepts primitives
+        const primitiveEvaluators: Record<string, string | number | boolean> =
+            {};
+        for (const [key, value] of Object.entries(evaluators)) {
+            if (
+                typeof value === "string" ||
+                typeof value === "number" ||
+                typeof value === "boolean"
+            ) {
+                primitiveEvaluators[key] = value;
+            }
+        }
+
         if (id in translations[this._language]) {
             return this._loadedLanguages
                 .get(this._language)
-                .formatMessage({ id }, evaluators);
+                .formatMessage({ id }, primitiveEvaluators);
         }
 
         if (id in translations[DEFAULT_LANGUAGE]) {
             return this._loadedLanguages
                 .get(DEFAULT_LANGUAGE)
-                .formatMessage({ id }, evaluators);
+                .formatMessage({ id }, primitiveEvaluators);
         }
 
         return "";

@@ -2413,7 +2413,8 @@ export class c2m {
             }),
             stat: availableStats[statIndex],
             outlierIndex: this._outlierMode ? this._outlierIndex : null,
-            announcePointLabelFirst: this._announcePointLabelFirst
+            announcePointLabelFirst: this._announcePointLabelFirst,
+            language: this._translator.language
         });
 
         const text = filteredJoin(
