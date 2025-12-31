@@ -7019,6 +7019,7 @@ var c2mChart = (function () {
                 lower: 21
             };
             this._silent = false;
+            this._playOnCategoryChange = false;
             this._outlierIndex = 0;
             this._outlierMode = false;
             this._announcePointLabelFirst = false;
@@ -7061,6 +7062,9 @@ var c2mChart = (function () {
                 if (input.options.announcePointLabelFirst !== undefined) {
                     this._announcePointLabelFirst =
                         input.options.announcePointLabelFirst;
+                }
+                if (input.options.playOnCategoryChange) {
+                    this._playOnCategoryChange = input.options.playOnCategoryChange;
                 }
             }
             prepChartElement({
@@ -7249,6 +7253,9 @@ var c2mChart = (function () {
                     this._visibleGroupIndex--;
                     this._announceCategoryChange();
                     this._cleanupAfterCategoryChange(currentX);
+                    if (this._playOnCategoryChange && !this._silent) {
+                        this._playAndSpeak();
+                    }
                     this._onFocus();
                 },
                 next_category: () => {
@@ -7261,6 +7268,9 @@ var c2mChart = (function () {
                     this._visibleGroupIndex++;
                     this._announceCategoryChange();
                     this._cleanupAfterCategoryChange(currentX);
+                    if (this._playOnCategoryChange && !this._silent) {
+                        this._playAndSpeak();
+                    }
                     this._onFocus();
                 },
                 first_category: () => {
