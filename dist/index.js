@@ -6483,6 +6483,14 @@ var c2mChart = (function () {
 
     const DEFAULT_LANGUAGE = "en";
     const AVAILABLE_LANGUAGES = Object.keys(translations);
+    const FALLBACK_LOCALES = {
+        hmn: "en"
+    };
+    function resolveLocale(locale) {
+        return Intl.NumberFormat.supportedLocalesOf(locale).length
+            ? locale
+            : (FALLBACK_LOCALES[locale] ?? DEFAULT_LANGUAGE);
+    }
     class TranslationManager {
         constructor(language = DEFAULT_LANGUAGE) {
             this._availableLanguageCodes = [];
@@ -6515,12 +6523,7 @@ var c2mChart = (function () {
                 return false;
             }
             this._loadedLanguages.set(code, createIntl({
-                locale: code,
-                onError: (...args) => {
-                    if (args[0].code === "MISSING_DATA") {
-                        return;
-                    }
-                },
+                locale: resolveLocale(code),
                 messages: translations[code]
             }));
             return true;
