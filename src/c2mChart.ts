@@ -486,9 +486,9 @@ export class c2m {
                 this._announceCategoryChange();
                 this._cleanupAfterCategoryChange(currentX);
 
-                // Play tone and speak point if option enabled
+                // Play tone if option enabled (speech is handled by _announceCategoryChange)
                 if (this._playOnCategoryChange && !this._silent) {
-                    this._playAndSpeak();
+                    this._playCurrent();
                 }
 
                 this._onFocus();
@@ -507,9 +507,9 @@ export class c2m {
                 this._announceCategoryChange();
                 this._cleanupAfterCategoryChange(currentX);
 
-                // Play tone and speak point if option enabled
+                // Play tone if option enabled (speech is handled by _announceCategoryChange)
                 if (this._playOnCategoryChange && !this._silent) {
-                    this._playAndSpeak();
+                    this._playCurrent();
                 }
 
                 this._onFocus();
@@ -1679,7 +1679,48 @@ export class c2m {
             return;
         }
 
-        this._sr.render(this.generateGroupSummary());
+        let message = this.generateGroupSummary();
+
+        // If playOnCategoryChange is enabled, append the point description
+        if (this._playOnCategoryChange) {
+            message += ". " + this._generateCurrentPointDescription();
+        }
+
+        this._sr.render(message);
+    }
+
+    /**
+     * Generate the description text for the current point
+     */
+    private _generateCurrentPointDescription(): string {
+        const current = this.currentPoint;
+        const { statIndex, availableStats } = this._metadataByGroup.at(
+            this._groupIndex
+        );
+
+        return generatePointDescription({
+            translationCallback: (code, evaluators) => {
+                return this._translator.translate(code, evaluators);
+            },
+            point: current,
+            xFormat: formatWrapper({
+                axis: this._xAxis,
+                translationCallback: (code, evaluators) => {
+                    return this._translator.translate(code, evaluators);
+                }
+            }),
+            yFormat: formatWrapper({
+                translationCallback: (code, evaluators) => {
+                    return this._translator.translate(code, evaluators);
+                },
+                axis: isAlternateAxisDataPoint(current)
+                    ? this._y2Axis
+                    : this._yAxis
+            }),
+            stat: availableStats[statIndex],
+            outlierIndex: this._outlierMode ? this._outlierIndex : null,
+            announcePointLabelFirst: this._announcePointLabelFirst
+        });
     }
 
     /**
@@ -2388,29 +2429,7 @@ export class c2m {
             this._flagNewStat = false;
         }
 
-        const point = generatePointDescription({
-            translationCallback: (code, evaluators) => {
-                return this._translator.translate(code, evaluators);
-            },
-            point: current,
-            xFormat: formatWrapper({
-                axis: this._xAxis,
-                translationCallback: (code, evaluators) => {
-                    return this._translator.translate(code, evaluators);
-                }
-            }),
-            yFormat: formatWrapper({
-                translationCallback: (code, evaluators) => {
-                    return this._translator.translate(code, evaluators);
-                },
-                axis: isAlternateAxisDataPoint(current)
-                    ? this._y2Axis
-                    : this._yAxis
-            }),
-            stat: availableStats[statIndex],
-            outlierIndex: this._outlierMode ? this._outlierIndex : null,
-            announcePointLabelFirst: this._announcePointLabelFirst
-        });
+        const point = this._generateCurrentPointDescription();
 
         const text = filteredJoin(
             [
