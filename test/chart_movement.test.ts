@@ -1402,6 +1402,7 @@ describe("playOnCategoryChange option", () => {
             audioEngine,
             options: {
                 playOnCategoryChange: true,
+                enableSpeech: true,
                 hertzes
             }
         });
@@ -1421,8 +1422,11 @@ describe("playOnCategoryChange option", () => {
 
         // Audio should have played
         expect(audioEngine.playCount).toBe(initialPlayCount + 1);
-        // Point value should be spoken
-        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
+        // Combined message should include category and point value
+        expect(mockElementCC.lastElementChild?.textContent?.trim()).toContain(
+            'Line chart showing "b".'
+        );
+        expect(mockElementCC.lastElementChild?.textContent?.trim()).toContain(
             "1, 11"
         );
 
@@ -1438,8 +1442,11 @@ describe("playOnCategoryChange option", () => {
 
         // Audio should have played again
         expect(audioEngine.playCount).toBe(afterNextPlayCount + 1);
-        // Point value should be spoken
-        expect(mockElementCC.lastElementChild?.textContent?.trim()).toBe(
+        // Combined message should include category and point value
+        expect(mockElementCC.lastElementChild?.textContent?.trim()).toContain(
+            'Line chart showing "a".'
+        );
+        expect(mockElementCC.lastElementChild?.textContent?.trim()).toContain(
             "1, 1"
         );
     });
