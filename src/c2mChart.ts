@@ -264,11 +264,6 @@ export class c2m {
 
         this._setData(input.data, input.axes);
 
-        // Since we don't support mobile devices, don't do anything if we're on mobile
-        if (detectIfMobile()) {
-            return;
-        }
-
         if (this._options.root) {
             this._hierarchy = true;
             this._hierarchyRoot = this._options.root;
@@ -282,6 +277,11 @@ export class c2m {
         ScreenReaderBridge.addAriaAttributes(this._ccElement);
         this._ccElement.setAttribute("lang", this._language);
         this._sr = new ScreenReaderBridge(this._ccElement);
+
+        // Since we don't support mobile devices, don't do anything if we're on mobile
+        if (detectIfMobile()) {
+            return;
+        }
 
         this._availableActions = this._initializeActionMap();
 

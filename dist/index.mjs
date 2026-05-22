@@ -7075,9 +7075,6 @@ class c2m {
             }
         });
         this._setData(input.data, input.axes);
-        if (detectIfMobile()) {
-            return;
-        }
         if (this._options.root) {
             this._hierarchy = true;
             this._hierarchyRoot = this._options.root;
@@ -7087,6 +7084,9 @@ class c2m {
         ScreenReaderBridge.addAriaAttributes(this._ccElement);
         this._ccElement.setAttribute("lang", this._language);
         this._sr = new ScreenReaderBridge(this._ccElement);
+        if (detectIfMobile()) {
+            return;
+        }
         this._availableActions = this._initializeActionMap();
         this._initializeKeyActionMap();
         this._startListening();
