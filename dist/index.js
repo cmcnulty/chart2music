@@ -7031,9 +7031,6 @@ var c2mChart = (function () {
             this._hierarchyRoot = null;
             this._hierarchyBreadcrumbs = [];
             this._cleanUpTasks = [];
-            if (detectIfMobile()) {
-                return;
-            }
             this._type = input.type;
             this._providedAudioEngine = input.audioEngine;
             this._title = input.title ?? "";
@@ -7081,6 +7078,9 @@ var c2mChart = (function () {
                 }
             });
             this._setData(input.data, input.axes);
+            if (detectIfMobile()) {
+                return;
+            }
             if (this._options.root) {
                 this._hierarchy = true;
                 this._hierarchyRoot = this._options.root;
@@ -7257,7 +7257,7 @@ var c2mChart = (function () {
                     this._announceCategoryChange();
                     this._cleanupAfterCategoryChange(currentX);
                     if (this._playOnCategoryChange && !this._silent) {
-                        this._playAndSpeak();
+                        this._playCurrent();
                     }
                     this._onFocus();
                 },
@@ -7272,7 +7272,7 @@ var c2mChart = (function () {
                     this._announceCategoryChange();
                     this._cleanupAfterCategoryChange(currentX);
                     if (this._playOnCategoryChange && !this._silent) {
-                        this._playAndSpeak();
+                        this._playCurrent();
                     }
                     this._onFocus();
                 },
@@ -8127,7 +8127,40 @@ var c2mChart = (function () {
             if (this._silent) {
                 return;
             }
-            this._sr.render(this.generateGroupSummary());
+            let message = this.generateGroupSummary();
+            if (this._playOnCategoryChange) {
+                message += ". " + this._generateCurrentPointDescription();
+            }
+            this._sr.render(message);
+        }
+        _generateCurrentPointDescription() {
+            const current = this.currentPoint;
+            const { statIndex, availableStats } = this._metadataByGroup.at(this._groupIndex);
+            return generatePointDescription({
+                translationCallback: (code, evaluators) => {
+                    return this._translator.translate(code, evaluators);
+                },
+                point: current,
+                xFormat: formatWrapper({
+                    axis: this._xAxis,
+                    translationCallback: (code, evaluators) => {
+                        return this._translator.translate(code, evaluators);
+                    }
+                }),
+                yFormat: formatWrapper({
+                    translationCallback: (code, evaluators) => {
+                        return this._translator.translate(code, evaluators);
+                    },
+                    axis: isAlternateAxisDataPoint(current)
+                        ? this._y2Axis
+                        : this._yAxis
+                }),
+                stat: availableStats[statIndex],
+                outlierIndex: this._outlierMode ? this._outlierIndex : null,
+                announcePointLabelFirst: this._announcePointLabelFirst,
+                pointIndex: this._pointIndex,
+                groupIndex: this._groupIndex
+            });
         }
         _playAndSpeak() {
             if (this._silent) {
@@ -8582,31 +8615,7 @@ var c2mChart = (function () {
             if (this._flagNewStat && availableStats.length === 0) {
                 this._flagNewStat = false;
             }
-            const point = generatePointDescription({
-                translationCallback: (code, evaluators) => {
-                    return this._translator.translate(code, evaluators);
-                },
-                point: current,
-                xFormat: formatWrapper({
-                    axis: this._xAxis,
-                    translationCallback: (code, evaluators) => {
-                        return this._translator.translate(code, evaluators);
-                    }
-                }),
-                yFormat: formatWrapper({
-                    translationCallback: (code, evaluators) => {
-                        return this._translator.translate(code, evaluators);
-                    },
-                    axis: isAlternateAxisDataPoint(current)
-                        ? this._y2Axis
-                        : this._yAxis
-                }),
-                stat: availableStats[statIndex],
-                outlierIndex: this._outlierMode ? this._outlierIndex : null,
-                announcePointLabelFirst: this._announcePointLabelFirst,
-                pointIndex: this._pointIndex,
-                groupIndex: this._groupIndex
-            });
+            const point = this._generateCurrentPointDescription();
             const text = filteredJoin([
                 this._flagNewLevel && this._currentGroupName,
                 this._flagNewStat &&

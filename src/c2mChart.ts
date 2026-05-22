@@ -203,11 +203,6 @@ export class c2m {
      * @param input - data/config provided by the invocation
      */
     constructor(input: SonifyTypes) {
-        // Since we don't support mobile devices, don't do anything if we're on mobile
-        if (detectIfMobile()) {
-            return;
-        }
-
         this._type = input.type;
         this._providedAudioEngine = input.audioEngine;
         this._title = input.title ?? "";
@@ -268,6 +263,11 @@ export class c2m {
         });
 
         this._setData(input.data, input.axes);
+
+        // Since we don't support mobile devices, don't do anything if we're on mobile
+        if (detectIfMobile()) {
+            return;
+        }
 
         if (this._options.root) {
             this._hierarchy = true;

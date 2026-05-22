@@ -561,37 +561,46 @@ var generatePointDescription = function generatePointDescription(_ref9) {
     outlierIndex = _ref9$outlierIndex === void 0 ? null : _ref9$outlierIndex,
     _ref9$announcePointLa = _ref9.announcePointLabelFirst,
     announcePointLabelFirst = _ref9$announcePointLa === void 0 ? false : _ref9$announcePointLa,
-    translationCallback = _ref9.translationCallback;
+    translationCallback = _ref9.translationCallback,
+    pointIndex = _ref9.pointIndex,
+    groupIndex = _ref9.groupIndex;
+  var withIndices = function withIndices(evaluators) {
+    return _objectSpread(_objectSpread(_objectSpread({}, evaluators), typeof pointIndex === "number" && {
+      pointIndex: pointIndex
+    }), typeof groupIndex === "number" && {
+      groupIndex: groupIndex
+    });
+  };
   if (isOHLCDataPoint(point)) {
     if (typeof stat !== "undefined") {
-      return translationCallback("point-xy", {
+      return translationCallback("point-xy", withIndices({
         x: xFormat(point.x),
         y: yFormat(point[stat])
-      });
+      }));
     }
-    return translationCallback("point-xohlc", {
+    return translationCallback("point-xohlc", withIndices({
       x: xFormat(point.x),
       open: yFormat(point.open),
       high: yFormat(point.high),
       low: yFormat(point.low),
       close: yFormat(point.close)
-    });
+    }));
   }
   if (isBoxDataPoint(point) && outlierIndex !== null) {
-    return translationCallback("point-outlier", {
+    return translationCallback("point-outlier", withIndices({
       x: xFormat(point.x),
       y: point.outlier.at(outlierIndex),
       index: outlierIndex + 1,
       count: point.outlier.length
-    });
+    }));
   }
   if (isBoxDataPoint(point) || isHighLowDataPoint(point)) {
     var _point$outlier;
     if (typeof stat !== "undefined") {
-      return translationCallback("point-xy", {
+      return translationCallback("point-xy", withIndices({
         x: xFormat(point.x),
         y: yFormat(point[stat])
-      });
+      }));
     }
     var x = point.x,
       high = point.high,
@@ -602,28 +611,31 @@ var generatePointDescription = function generatePointDescription(_ref9) {
       low: yFormat(low)
     };
     if ("outlier" in point && ((_point$outlier = point.outlier) === null || _point$outlier === void 0 ? void 0 : _point$outlier.length) > 0) {
-      return translationCallback("point-xhl-outlier", _objectSpread(_objectSpread({}, formattedPoint), {}, {
+      return translationCallback("point-xhl-outlier", withIndices(_objectSpread(_objectSpread({}, formattedPoint), {}, {
         count: point.outlier.length
-      }));
+      })));
     }
-    return translationCallback("point-xhl", formattedPoint);
+    return translationCallback("point-xhl", withIndices(formattedPoint));
   }
   if (isSimpleDataPoint(point)) {
-    var details = [xFormat(point.x), yFormat(point.y)];
-    if (point.label) {
-      if (announcePointLabelFirst) {
-        details.unshift(point.label);
-      } else {
-        details.push(point.label);
-      }
+    if (!point.label) {
+      return translationCallback("point-xy", withIndices({
+        x: xFormat(point.x),
+        y: yFormat(point.y)
+      }));
     }
-    return details.join(", ");
+    return translationCallback("point-xy-label", withIndices({
+      x: xFormat(point.x),
+      y: yFormat(point.y),
+      label: point.label,
+      announcePointLabelFirst: announcePointLabelFirst
+    }));
   }
   if (isAlternateAxisDataPoint(point)) {
-    return translationCallback("point-xy", {
+    return translationCallback("point-xy", withIndices({
       x: xFormat(point.x),
       y: yFormat(point.y2)
-    });
+    }));
   }
   return "";
 };
@@ -4184,10 +4196,11 @@ var dictionary$5 = {
   "stat-q3": "Q3",
   "stat-outlier": "Outlier",
   "point-xy": "{x}, {y}",
+  "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
   "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
   "point-outlier": "{x}, {y}, {index} of {count}",
   "point-xhl": "{x}, {high} - {low}",
-  "point-xhl-outlier": "{x}, {high} - {low}, with {count, plural, \n        =0 {no outliers} \n        one {{count} outlier} \n        other {{count} outliers}\n    }",
+  "point-xhl-outlier": "{x}, {high} - {low}, with {count, plural,\n        =0 {no outliers}\n        one {{count} outlier}\n        other {{count} outliers}\n    }",
   "info-open": "Open info dialog",
   "info-title": "Info",
   "info-notes": "Notes",
@@ -4338,10 +4351,11 @@ var dictionary$4 = {
   "stat-q3": "Q3",
   "stat-outlier": "Ausreisser",
   "point-xy": "{x}, {y}",
+  "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
   "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
   "point-outlier": "{x}, {y}, {index} von {count}",
   "point-xhl": "{x}, {high} - {low}",
-  "point-xhl-outlier": "{x}, {high} - {low}, mit {count, plural, \n        =0 {keinem Ausreisser} \n        one {{count} Ausreisser} \n        other {{count} Ausreissern}\n    }",
+  "point-xhl-outlier": "{x}, {high} - {low}, mit {count, plural,\n        =0 {keinem Ausreisser}\n        one {{count} Ausreisser}\n        other {{count} Ausreissern}\n    }",
   "info-open": "Info öffnen",
   "info-title": "Info",
   "info-notes": "Kommentare",
@@ -4460,10 +4474,11 @@ var dictionary$3 = {
   "stat-q3": "Q3",
   "stat-outlier": "Valor Atípico",
   "point-xy": "{x}, {y}",
+  "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
   "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
   "point-outlier": "{x}, {y}, {index} de {count}",
   "point-xhl": "{x}, {high} - {low}",
-  "point-xhl-outlier": "{x}, {high} - {low}, con {count, plural, \n        =0 {Sin valores at\xEDpicos} \n        one {{count} valor at\xEDpico} \n        other {{count} valores at\xEDpicos}\n    }",
+  "point-xhl-outlier": "{x}, {high} - {low}, con {count, plural,\n        =0 {Sin valores at\xEDpicos}\n        one {{count} valor at\xEDpico}\n        other {{count} valores at\xEDpicos}\n    }",
   "info-open": "Abrir info",
   "info-title": "Info",
   "info-notes": "Notas",
@@ -4582,6 +4597,7 @@ var dictionary$2 = {
   "stat-q3": "Q3",
   "stat-outlier": "Valeur aberrante",
   "point-xy": "{x}, {y}",
+  "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
   "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
   "point-outlier": "{x}, {y}, {index} de {count}",
   "point-xhl": "{x}, {high} - {low}",
@@ -4704,10 +4720,11 @@ var dictionary$1 = {
   "stat-q3": "Q3",
   "stat-outlier": "Outlier",
   "point-xy": "{x}, {y}",
+  "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
   "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
   "point-outlier": "{x}, {y}, {index} di {count}",
   "point-xhl": "{x}, {high} - {low}",
-  "point-xhl-outlier": "{x}, {high} - {low}, con {count, plural, \n        =0 {nessun outlier} \n        one {{count} outlier} \n        other {{count} outlier}\n    }",
+  "point-xhl-outlier": "{x}, {high} - {low}, con {count, plural,\n        =0 {nessun outlier}\n        one {{count} outlier}\n        other {{count} outlier}\n    }",
   "info-open": "Apri info",
   "info-title": "Info",
   "info-notes": "Commenti",
@@ -4826,6 +4843,7 @@ var dictionary = {
   "stat-q3": "Q3",
   "stat-outlier": "Tawm txawv",
   "point-xy": "{x}, {y}",
+  "point-xy-label": "{announcePointLabelFirst, select, true {{label}, {x}, {y}} other {{x}, {y}, {label}}}",
   "point-xohlc": "{x}, {open} - {high} - {low} - {close}",
   "point-outlier": "{x}, {y}, {index} ntawm {count}",
   "point-xhl": "{x}, {high} - {low}",
@@ -4922,6 +4940,13 @@ var translations = /*#__PURE__*/Object.freeze({
 });
 var DEFAULT_LANGUAGE = "en";
 var AVAILABLE_LANGUAGES = Object.keys(translations);
+var FALLBACK_LOCALES = {
+  hmn: "en"
+};
+function resolveLocale(locale) {
+  var _FALLBACK_LOCALES$loc;
+  return Intl.NumberFormat.supportedLocalesOf(locale).length ? locale : (_FALLBACK_LOCALES$loc = FALLBACK_LOCALES[locale]) !== null && _FALLBACK_LOCALES$loc !== void 0 ? _FALLBACK_LOCALES$loc : DEFAULT_LANGUAGE;
+}
 var TranslationManager = /*#__PURE__*/function () {
   function TranslationManager() {
     var language = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : DEFAULT_LANGUAGE;
@@ -4968,7 +4993,7 @@ var TranslationManager = /*#__PURE__*/function () {
         return false;
       }
       this._loadedLanguages.set(code, createIntl({
-        locale: code,
+        locale: resolveLocale(code),
         messages: translations[code]
       }));
       return true;
@@ -5502,6 +5527,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       lower: 21
     };
     this._silent = false;
+    this._playOnCategoryChange = false;
     this._outlierIndex = 0;
     this._outlierMode = false;
     this._announcePointLabelFirst = false;
@@ -5510,9 +5536,6 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
     this._hierarchyRoot = null;
     this._hierarchyBreadcrumbs = [];
     this._cleanUpTasks = [];
-    if (detectIfMobile()) {
-      return;
-    }
     this._type = input.type;
     this._providedAudioEngine = input.audioEngine;
     this._title = (_input$title = input.title) !== null && _input$title !== void 0 ? _input$title : "";
@@ -5537,6 +5560,12 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       if (input.options.translationCallback) {
         this._translator.intercepterCallback = input.options.translationCallback;
       }
+      if (input.options.announcePointLabelFirst !== undefined) {
+        this._announcePointLabelFirst = input.options.announcePointLabelFirst;
+      }
+      if (input.options.playOnCategoryChange) {
+        this._playOnCategoryChange = input.options.playOnCategoryChange;
+      }
     }
     prepChartElement({
       elem: this._chartElement,
@@ -5549,6 +5578,9 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
     });
     this._setData(input.data, input.axes);
+    if (detectIfMobile()) {
+      return;
+    }
     if (this._options.root) {
       this._hierarchy = true;
       this._hierarchyRoot = this._options.root;
@@ -5740,6 +5772,9 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
           _this7._visibleGroupIndex--;
           _this7._announceCategoryChange();
           _this7._cleanupAfterCategoryChange(currentX);
+          if (_this7._playOnCategoryChange && !_this7._silent) {
+            _this7._playCurrent();
+          }
           _this7._onFocus();
         },
         next_category: function next_category() {
@@ -5751,6 +5786,9 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
           _this7._visibleGroupIndex++;
           _this7._announceCategoryChange();
           _this7._cleanupAfterCategoryChange(currentX);
+          if (_this7._playOnCategoryChange && !_this7._silent) {
+            _this7._playCurrent();
+          }
           _this7._onFocus();
         },
         first_category: function first_category() {
@@ -5992,10 +6030,10 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       return Object.entries(freqTable).map(function (_ref21) {
         var _ref22 = _slicedToArray(_ref21, 2),
           x = _ref22[0],
-          y = _ref22[1];
+          total = _ref22[1];
         return {
           x: Number(x),
-          y: y
+          y: total
         };
       });
     }
@@ -6617,18 +6655,54 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       if (this._silent) {
         return;
       }
-      this._sr.render(this.generateGroupSummary());
+      var message = this.generateGroupSummary();
+      if (this._playOnCategoryChange) {
+        message += ". " + this._generateCurrentPointDescription();
+      }
+      this._sr.render(message);
+    }
+  }, {
+    key: "_generateCurrentPointDescription",
+    value: function _generateCurrentPointDescription() {
+      var _this13 = this;
+      var current = this.currentPoint;
+      var _this$_metadataByGrou3 = this._metadataByGroup.at(this._groupIndex),
+        statIndex = _this$_metadataByGrou3.statIndex,
+        availableStats = _this$_metadataByGrou3.availableStats;
+      return generatePointDescription({
+        translationCallback: function translationCallback(code, evaluators) {
+          return _this13._translator.translate(code, evaluators);
+        },
+        point: current,
+        xFormat: formatWrapper({
+          axis: this._xAxis,
+          translationCallback: function translationCallback(code, evaluators) {
+            return _this13._translator.translate(code, evaluators);
+          }
+        }),
+        yFormat: formatWrapper({
+          translationCallback: function translationCallback(code, evaluators) {
+            return _this13._translator.translate(code, evaluators);
+          },
+          axis: isAlternateAxisDataPoint(current) ? this._y2Axis : this._yAxis
+        }),
+        stat: availableStats[statIndex],
+        outlierIndex: this._outlierMode ? this._outlierIndex : null,
+        announcePointLabelFirst: this._announcePointLabelFirst,
+        pointIndex: this._pointIndex,
+        groupIndex: this._groupIndex
+      });
     }
   }, {
     key: "_playAndSpeak",
     value: function _playAndSpeak() {
-      var _this13 = this;
+      var _this14 = this;
       if (this._silent) {
         return;
       }
       this._playCurrent();
       setTimeout(function () {
-        _this13._speakCurrent(_this13.currentPoint);
+        _this14._speakCurrent(_this14.currentPoint);
       }, NOTE_LENGTH * 1000);
     }
   }, {
@@ -6745,9 +6819,9 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_checkOutlierMode",
     value: function _checkOutlierMode() {
-      var _this$_metadataByGrou3 = this._metadataByGroup[this._groupIndex],
-        statIndex = _this$_metadataByGrou3.statIndex,
-        availableStats = _this$_metadataByGrou3.availableStats;
+      var _this$_metadataByGrou4 = this._metadataByGroup[this._groupIndex],
+        statIndex = _this$_metadataByGrou4.statIndex,
+        availableStats = _this$_metadataByGrou4.availableStats;
       this._outlierMode = ["outlier", "xtremeOutlier"].includes(availableStats[statIndex]);
       this._outlierIndex = 0;
     }
@@ -6765,9 +6839,9 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_moveNextStat",
     value: function _moveNextStat() {
-      var _this$_metadataByGrou4 = this._metadataByGroup[this._groupIndex],
-        statIndex = _this$_metadataByGrou4.statIndex,
-        availableStats = _this$_metadataByGrou4.availableStats;
+      var _this$_metadataByGrou5 = this._metadataByGroup[this._groupIndex],
+        statIndex = _this$_metadataByGrou5.statIndex,
+        availableStats = _this$_metadataByGrou5.availableStats;
       if (statIndex >= availableStats.length - 1) {
         return false;
       }
@@ -6784,15 +6858,15 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playLeftOutlier",
     value: function _playLeftOutlier() {
-      var _this14 = this;
+      var _this15 = this;
       var min = 0;
       this._playListInterval = setInterval(function () {
-        if (_this14._outlierIndex <= min) {
-          _this14._outlierIndex = min;
-          _this14._clearPlay();
+        if (_this15._outlierIndex <= min) {
+          _this15._outlierIndex = min;
+          _this15._clearPlay();
         } else {
-          _this14._outlierIndex--;
-          _this14._playCurrent();
+          _this15._outlierIndex--;
+          _this15._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6800,7 +6874,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playLeft",
     value: function _playLeft() {
-      var _this15 = this;
+      var _this16 = this;
       if (this._outlierMode) {
         this._playLeftOutlier();
         return;
@@ -6811,12 +6885,12 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       var min = 0;
       this._playListInterval = setInterval(function () {
-        if (_this15._pointIndex <= min) {
-          _this15._pointIndex = min;
-          _this15._clearPlay();
+        if (_this16._pointIndex <= min) {
+          _this16._pointIndex = min;
+          _this16._clearPlay();
         } else {
-          _this15._pointIndex--;
-          _this15._playCurrent();
+          _this16._pointIndex--;
+          _this16._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6825,18 +6899,18 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
     key: "_playRightOutlier",
     value: function _playRightOutlier() {
       var _this$currentPoint$ou,
-        _this16 = this;
+        _this17 = this;
       if (!(isBoxDataPoint(this.currentPoint) && "outlier" in this.currentPoint)) {
         return;
       }
       var max = ((_this$currentPoint$ou = this.currentPoint.outlier) === null || _this$currentPoint$ou === void 0 ? void 0 : _this$currentPoint$ou.length) - 1;
       this._playListInterval = setInterval(function () {
-        if (_this16._outlierIndex >= max) {
-          _this16._outlierIndex = max;
-          _this16._clearPlay();
+        if (_this17._outlierIndex >= max) {
+          _this17._outlierIndex = max;
+          _this17._clearPlay();
         } else {
-          _this16._outlierIndex++;
-          _this16._playCurrent();
+          _this17._outlierIndex++;
+          _this17._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6844,7 +6918,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playRightContinuous",
     value: function _playRightContinuous() {
-      var _this17 = this;
+      var _this18 = this;
       var startIndex = this._pointIndex;
       var startX = this.getCurrent().point.x;
       var row = this._currentDataRow.slice(startIndex);
@@ -6858,16 +6932,16 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       };
       var startingPct = change(startX);
       row.forEach(function (item, index) {
-        _this17._playListContinuous.push(setTimeout(function () {
-          _this17._pointIndex = startIndex + index;
-          _this17._playCurrent();
+        _this18._playListContinuous.push(setTimeout(function () {
+          _this18._pointIndex = startIndex + index;
+          _this18._playCurrent();
         }, (change(item.x) - startingPct) * totalTime));
       });
     }
   }, {
     key: "_playLeftContinuous",
     value: function _playLeftContinuous() {
-      var _this18 = this;
+      var _this19 = this;
       var startIndex = this._pointIndex;
       var startX = this.getCurrent().point.x;
       var row = this._currentDataRow.slice(0, startIndex + 1);
@@ -6881,16 +6955,16 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       };
       var startingPct = change(startX);
       row.reverse().forEach(function (item, index) {
-        _this18._playListContinuous.push(setTimeout(function () {
-          _this18._pointIndex = startIndex - index;
-          _this18._playCurrent();
+        _this19._playListContinuous.push(setTimeout(function () {
+          _this19._pointIndex = startIndex - index;
+          _this19._playCurrent();
         }, (change(item.x) - startingPct) * totalTime));
       });
     }
   }, {
     key: "_playRight",
     value: function _playRight() {
-      var _this19 = this;
+      var _this20 = this;
       if (this._outlierMode) {
         this._playRightOutlier();
         return;
@@ -6901,12 +6975,12 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       var max = this._currentDataRow.length - 1;
       this._playListInterval = setInterval(function () {
-        if (_this19._pointIndex >= max) {
-          _this19._pointIndex = max;
-          _this19._clearPlay();
+        if (_this20._pointIndex >= max) {
+          _this20._pointIndex = max;
+          _this20._clearPlay();
         } else {
-          _this19._pointIndex++;
-          _this19._playCurrent();
+          _this20._pointIndex++;
+          _this20._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6986,9 +7060,9 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         this._onFocus();
         return;
       }
-      var _this$_metadataByGrou5 = this._metadataByGroup[this._groupIndex],
-        statIndex = _this$_metadataByGrou5.statIndex,
-        availableStats = _this$_metadataByGrou5.availableStats;
+      var _this$_metadataByGrou6 = this._metadataByGroup[this._groupIndex],
+        statIndex = _this$_metadataByGrou6.statIndex,
+        availableStats = _this$_metadataByGrou6.availableStats;
       this._playDataPoint(this.currentPoint, statIndex, availableStats);
       this._onFocus();
     }
@@ -7006,7 +7080,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playDataPoint",
     value: function _playDataPoint(current, statIndex, availableStats) {
-      var _this20 = this;
+      var _this21 = this;
       this._checkAudioEngine();
       if (!this._audioEngine) {
         return;
@@ -7077,19 +7151,19 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         }
         var interval = 1 / (availableStats.length + 1);
         availableStats.forEach(function (stat, index) {
-          if (isUnplayable(current[stat], _this20._yAxis) || stat === "outlier") {
+          if (isUnplayable(current[stat], _this21._yAxis) || stat === "outlier") {
             return;
           }
           var yBin = interpolateBin({
             point: current[stat],
-            min: _this20._yAxis.minimum,
-            max: _this20._yAxis.maximum,
+            min: _this21._yAxis.minimum,
+            max: _this21._yAxis.maximum,
             bins: hertzes.length - 1,
-            scale: _this20._yAxis.type
+            scale: _this21._yAxis.type
           });
           setTimeout(function () {
-            _this20._audioEngine.playDataPoint(hertzes[yBin], xPan, NOTE_LENGTH);
-          }, SPEEDS.at(_this20._speedRateIndex) * interval * index);
+            _this21._audioEngine.playDataPoint(hertzes[yBin], xPan, NOTE_LENGTH);
+          }, SPEEDS.at(_this21._speedRateIndex) * interval * index);
         });
       }
     }
@@ -7109,8 +7183,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_speakCurrent",
     value: function _speakCurrent(current) {
-      var _this21 = this,
-        _availableStats$statI2;
+      var _availableStats$statI2;
       if (!this._options.enableSpeech) {
         return;
       }
@@ -7118,33 +7191,13 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         this._sr.render(current.label);
         return;
       }
-      var _this$_metadataByGrou6 = this._metadataByGroup.at(this._groupIndex),
-        statIndex = _this$_metadataByGrou6.statIndex,
-        availableStats = _this$_metadataByGrou6.availableStats;
+      var _this$_metadataByGrou7 = this._metadataByGroup.at(this._groupIndex),
+        statIndex = _this$_metadataByGrou7.statIndex,
+        availableStats = _this$_metadataByGrou7.availableStats;
       if (this._flagNewStat && availableStats.length === 0) {
         this._flagNewStat = false;
       }
-      var point = generatePointDescription({
-        translationCallback: function translationCallback(code, evaluators) {
-          return _this21._translator.translate(code, evaluators);
-        },
-        point: current,
-        xFormat: formatWrapper({
-          axis: this._xAxis,
-          translationCallback: function translationCallback(code, evaluators) {
-            return _this21._translator.translate(code, evaluators);
-          }
-        }),
-        yFormat: formatWrapper({
-          translationCallback: function translationCallback(code, evaluators) {
-            return _this21._translator.translate(code, evaluators);
-          },
-          axis: isAlternateAxisDataPoint(current) ? this._y2Axis : this._yAxis
-        }),
-        stat: availableStats[statIndex],
-        outlierIndex: this._outlierMode ? this._outlierIndex : null,
-        announcePointLabelFirst: this._announcePointLabelFirst
-      });
+      var point = this._generateCurrentPointDescription();
       var text = filteredJoin([this._flagNewLevel && this._currentGroupName, this._flagNewStat && this._translator.translate("stat-".concat((_availableStats$statI2 = availableStats[statIndex]) !== null && _availableStats$statI2 !== void 0 ? _availableStats$statI2 : "all")), point, this._hierarchy && current.children && this._translator.translate("nodeHasChildren")], ", ");
       this._sr.render(text);
       this._flagNewLevel = false;

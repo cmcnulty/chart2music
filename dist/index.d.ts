@@ -7,17 +7,12 @@ interface AudioEngine {
     playNotification?(notificationType: AudioNotificationType, panning?: number, duration?: number): void;
 }
 
-interface StackBreakdownItem {
-    group: string;
-    value: number;
-}
 interface DataPoint {
     x: number;
     label?: string;
     custom?: unknown;
     children?: string;
     type?: "annotation";
-    _stackBreakdown?: StackBreakdownItem[];
 }
 interface SimpleDataPoint extends DataPoint {
     y: number;
@@ -229,6 +224,7 @@ declare class c2m {
     private generateGroupSummary;
     private _startListening;
     private _announceCategoryChange;
+    private _generateCurrentPointDescription;
     private _playAndSpeak;
     private _moveNextOutlier;
     private _movePrevOutlier;
