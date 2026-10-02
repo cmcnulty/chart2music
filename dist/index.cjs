@@ -5125,6 +5125,9 @@ var validateInputDataHomogeneity = function validateInputDataHomogeneity(data) {
   return "";
 };
 var validateInputDataRowHomogeneity = function validateInputDataRowHomogeneity(row) {
+  if (row.length === 0) {
+    return "";
+  }
   var first = row[0];
   if (typeof first === "number") {
     var failure = row.findIndex(function (cell) {

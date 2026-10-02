@@ -143,6 +143,9 @@ test("validateInput", () => {
 });
 
 test("validateInputDataRowHomogeneity", () => {
+    // Empty rows have nothing to be heterogeneous, so they're valid
+    expect(validateInputDataRowHomogeneity([])).toBe("");
+
     // Confirm number homogeneity
     expect(validateInputDataRowHomogeneity([1, 2, 3, 4, 5])).toBe("");
 

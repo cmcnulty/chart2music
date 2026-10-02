@@ -155,6 +155,9 @@ export const validateInputDataHomogeneity = (data: SonifyTypes["data"]) => {
 export const validateInputDataRowHomogeneity = (
     row: (number | SupportedDataPointType)[]
 ) => {
+    if (row.length === 0) {
+        return "";
+    }
     const first = row[0];
     if (typeof first === "number") {
         const failure = row.findIndex((cell) => !(typeof cell === "number"));
