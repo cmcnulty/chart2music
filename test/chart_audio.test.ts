@@ -212,7 +212,8 @@ test("Move around by single events - plot with y and y2", () => {
             key: " "
         })
     );
-    expect(setTimeout).toHaveBeenCalledTimes(2);
+    // PageDown schedules its speech after the tone too, so that's 1 more timeout
+    expect(setTimeout).toHaveBeenCalledTimes(3);
     jest.advanceTimersByTime(50);
     expect(audioEngine.lastPanning).toBe(-0.98);
     expect(audioEngine.lastFrequency).toBe(55);

@@ -191,7 +191,8 @@ test("Move at boundaries - grouped and stat'd", () => {
                 stat: "",
                 point: { x: 1, y: 11 }
             },
-            timer: 3
+            // Category changes now schedule their speech after the tone, like point moves
+            timer: 4
         },
         {
             // Play sounds
@@ -202,7 +203,7 @@ test("Move at boundaries - grouped and stat'd", () => {
                 stat: "",
                 point: { x: 1, y: 11 }
             },
-            timer: 4
+            timer: 5
         },
         {
             // Can't move
@@ -213,7 +214,7 @@ test("Move at boundaries - grouped and stat'd", () => {
                 stat: "",
                 point: { x: 1, y: 11 }
             },
-            timer: 4
+            timer: 5
         }
     ].forEach(({ key, point, timer }) => {
         mockElement.dispatchEvent(

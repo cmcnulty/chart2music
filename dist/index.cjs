@@ -168,6 +168,7 @@ function createOperator(context, carrierFrequency, modulatorFrequency, modulator
 var HERTZ = [16.3516, 17.32391, 18.35405, 19.44544, 20.60172, 21.82676, 23.12465, 24.49971, 25.95654, 27.5, 29.13524, 30.86771, 32.7032, 34.64783, 36.7081, 38.89087, 41.20344, 43.65353, 46.2493, 48.99943, 51.91309, 55, 58.27047, 61.73541, 65.40639, 69.29566, 73.41619, 77.78175, 82.40689, 87.30706, 92.49861, 97.99886, 103.8262, 110, 116.5409, 123.4708, 130.8128, 138.5913, 146.8324, 155.5635, 164.8138, 174.6141, 184.9972, 195.9977, 207.6523, 220, 233.0819, 246.9417, 261.6256, 277.1826, 293.6648, 311.127, 329.6276, 349.2282, 369.9944, 391.9954, 415.3047, 440, 466.1638, 493.8833, 523.2511, 554.3653, 587.3295, 622.254, 659.2551, 698.4565, 739.9888, 783.9909, 830.6094, 880, 932.3275, 987.7666, 1046.502, 1108.731, 1174.659, 1244.508, 1318.51, 1396.913, 1479.978, 1567.982, 1661.219, 1760, 1864.655, 1975.533, 2093.005, 2217.461, 2349.318, 2489.016, 2637.02, 2793.826, 2959.955, 3135.963, 3322.438, 3520, 3729.31, 3951.066, 4186.009, 4434.922, 4698.636, 4978.032, 5274.041, 5587.652, 5919.911, 6271.927, 6644.875, 7040, 7458.62, 7902.133];
 var SPEEDS = [1000, 250, 100, 50, 25];
 var NOTE_LENGTH = 0.25;
+var HELD_KEY_SPEECH_FALLBACK = 1000;
 var keyboardEventToString = function keyboardEventToString(e) {
   return "".concat(e.altKey ? "Alt+" : "").concat(e.ctrlKey ? "Ctrl+" : "").concat(e.shiftKey ? "Shift+" : "").concat(e.key);
 };
@@ -3966,8 +3967,8 @@ function formatListToParts(_a, getListFormat, values, options) {
   var filteredOptions = filterProps(options, LIST_FORMAT_OPTIONS);
   try {
     var richValues_1 = {};
-    var serializedValues = values.map(function (v, i) {
-      if (_typeof(v) === 'object') {
+    var serializedValues = Array.from(values).map(function (v, i) {
+      if (_typeof(v) === 'object' && v !== null) {
         var id = generateToken(i);
         richValues_1[id] = v;
         return id;
@@ -5505,6 +5506,11 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
     this._pointIndex = 0;
     this._playListInterval = null;
     this._playListContinuous = [];
+    this._speakTimeout = null;
+    this._keysDown = new Set();
+    this._keyupSeen = false;
+    this._speakOnKeyRelease = null;
+    this._pendingSpeech = null;
     this._speedRateIndex = 1;
     this._flagNewLevel = false;
     this._flagNewStat = false;
@@ -5593,7 +5599,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
     if (detectIfMobile()) {
       return;
     }
-    this._availableActions = this._initializeActionMap();
+    this._availableActions = this._keepSpeechWhenNavigationFails(this._initializeActionMap());
     this._initializeKeyActionMap();
     this._startListening();
   }
@@ -5652,320 +5658,375 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         clearTimeout(item);
       });
       this._playListContinuous = [];
+      this._cancelPendingSpeech();
+    }
+  }, {
+    key: "_cancelPendingSpeech",
+    value: function _cancelPendingSpeech() {
+      if (this._speakTimeout !== null) {
+        clearTimeout(this._speakTimeout);
+        this._speakTimeout = null;
+      }
+      this._speakOnKeyRelease = null;
+      this._pendingSpeech = null;
+    }
+  }, {
+    key: "_speakAfterTone",
+    value: function _speakAfterTone(speak) {
+      var _this7 = this;
+      this._cancelPendingSpeech();
+      this._pendingSpeech = speak;
+      var run = function run() {
+        _this7._pendingSpeech = null;
+        speak();
+      };
+      this._speakTimeout = setTimeout(function () {
+        _this7._speakTimeout = null;
+        if (_this7._keyupSeen && _this7._keysDown.size > 0) {
+          _this7._speakOnKeyRelease = speak;
+          _this7._speakTimeout = setTimeout(function () {
+            _this7._speakTimeout = null;
+            _this7._speakOnKeyRelease = null;
+            _this7._keysDown.clear();
+            run();
+          }, HELD_KEY_SPEECH_FALLBACK);
+          return;
+        }
+        run();
+      }, NOTE_LENGTH * 1000);
+    }
+  }, {
+    key: "_keepSpeechWhenNavigationFails",
+    value: function _keepSpeechWhenNavigationFails(actions) {
+      var _this8 = this;
+      var navigationActions = [ActionSet.NEXT_POINT, ActionSet.PREVIOUS_POINT, ActionSet.DRILL_DOWN, ActionSet.DRILL_UP, ActionSet.GO_TO_ROOT, ActionSet.PREVIOUS_STAT, ActionSet.NEXT_STAT, ActionSet.PREVIOUS_CATEGORY, ActionSet.NEXT_CATEGORY, ActionSet.FIRST_CATEGORY, ActionSet.LAST_CATEGORY, ActionSet.FIRST_POINT, ActionSet.LAST_POINT, ActionSet.PREVIOUS_TENTH, ActionSet.NEXT_TENTH, ActionSet.GO_MINIMUM, ActionSet.GO_MAXIMUM, ActionSet.GO_TOTAL_MAXIMUM, ActionSet.GO_TOTAL_MINIMUM];
+      navigationActions.forEach(function (name) {
+        var action = actions[name];
+        actions[name] = function () {
+          var pending = _this8._pendingSpeech;
+          var lastAnnouncement = _this8._sr.lastCreatedElement;
+          action();
+          var nothingNew = _this8._pendingSpeech === null && _this8._sr.lastCreatedElement === lastAnnouncement;
+          if (pending && nothingNew) {
+            _this8._speakAfterTone(pending);
+          }
+        };
+      });
+      return actions;
     }
   }, {
     key: "_initializeActionMap",
     value: function _initializeActionMap() {
-      var _this7 = this;
+      var _this9 = this;
       return {
         next_point: function next_point() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          if (_this7._moveRight()) {
-            _this7._playAndSpeak();
+          if (_this9._moveRight()) {
+            _this9._playAndSpeak();
           }
         },
         previous_point: function previous_point() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          if (_this7._moveLeft()) {
-            _this7._playAndSpeak();
+          if (_this9._moveLeft()) {
+            _this9._playAndSpeak();
           }
         },
         drill_down: function drill_down() {
-          _this7._clearPlay();
-          if (_this7._drillDown()) {
-            _this7._playAndSpeak();
+          _this9._clearPlay();
+          if (_this9._drillDown()) {
+            _this9._playAndSpeak();
           }
         },
         drill_up: function drill_up() {
-          _this7._clearPlay();
-          if (_this7._drillUp()) {
-            _this7._playAndSpeak();
+          _this9._clearPlay();
+          if (_this9._drillUp()) {
+            _this9._playAndSpeak();
           }
         },
         go_to_root: function go_to_root() {
-          _this7._clearPlay();
-          if (_this7._drillToRoot()) {
-            _this7._playAndSpeak();
+          _this9._clearPlay();
+          if (_this9._drillToRoot()) {
+            _this9._playAndSpeak();
           }
         },
         play_right: function play_right() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._playRight();
+          _this9._playRight();
         },
         play_left: function play_left() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._playLeft();
+          _this9._playLeft();
         },
         play_forward_category: function play_forward_category() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          var max = _this7._visible_group_indices.length - 1;
-          _this7._playListInterval = setInterval(function () {
-            if (_this7._visibleGroupIndex >= max) {
-              _this7._visibleGroupIndex = max;
-              _this7._clearPlay();
+          var max = _this9._visible_group_indices.length - 1;
+          _this9._playListInterval = setInterval(function () {
+            if (_this9._visibleGroupIndex >= max) {
+              _this9._visibleGroupIndex = max;
+              _this9._clearPlay();
             } else {
-              _this7._visibleGroupIndex++;
-              _this7._playCurrent();
+              _this9._visibleGroupIndex++;
+              _this9._playCurrent();
             }
-          }, SPEEDS.at(_this7._speedRateIndex));
-          _this7._playCurrent();
+          }, SPEEDS.at(_this9._speedRateIndex));
+          _this9._playCurrent();
         },
         play_backward_category: function play_backward_category() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
           var min = 0;
-          _this7._playListInterval = setInterval(function () {
-            if (_this7._visibleGroupIndex <= min) {
-              _this7._visibleGroupIndex = min;
-              _this7._clearPlay();
+          _this9._playListInterval = setInterval(function () {
+            if (_this9._visibleGroupIndex <= min) {
+              _this9._visibleGroupIndex = min;
+              _this9._clearPlay();
             } else {
-              _this7._visibleGroupIndex--;
-              _this7._playCurrent();
+              _this9._visibleGroupIndex--;
+              _this9._playCurrent();
             }
-          }, SPEEDS.at(_this7._speedRateIndex));
-          _this7._playCurrent();
+          }, SPEEDS.at(_this9._speedRateIndex));
+          _this9._playCurrent();
         },
         stop_play: function stop_play() {
-          _this7._clearPlay();
+          _this9._clearPlay();
         },
         previous_stat: function previous_stat() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          if (_this7._movePrevStat()) {
-            _this7._flagNewStat = true;
-            _this7._playAndSpeak();
+          if (_this9._movePrevStat()) {
+            _this9._flagNewStat = true;
+            _this9._playAndSpeak();
           }
         },
         next_stat: function next_stat() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          if (_this7._moveNextStat()) {
-            _this7._flagNewStat = true;
-            _this7._playAndSpeak();
+          if (_this9._moveNextStat()) {
+            _this9._flagNewStat = true;
+            _this9._playAndSpeak();
           }
         },
         previous_category: function previous_category() {
-          var _this7$currentPoint$x, _this7$currentPoint;
-          _this7._clearPlay();
-          if (_this7._visibleGroupIndex === 0) {
+          var _this9$currentPoint$x, _this9$currentPoint;
+          _this9._clearPlay();
+          if (_this9._visibleGroupIndex === 0) {
             return;
           }
-          var currentX = (_this7$currentPoint$x = (_this7$currentPoint = _this7.currentPoint) === null || _this7$currentPoint === void 0 ? void 0 : _this7$currentPoint.x) !== null && _this7$currentPoint$x !== void 0 ? _this7$currentPoint$x : _this7._pointIndex;
-          _this7._visibleGroupIndex--;
-          _this7._announceCategoryChange();
-          _this7._cleanupAfterCategoryChange(currentX);
-          if (_this7._playOnCategoryChange && !_this7._silent) {
-            _this7._playCurrent();
+          var currentX = (_this9$currentPoint$x = (_this9$currentPoint = _this9.currentPoint) === null || _this9$currentPoint === void 0 ? void 0 : _this9$currentPoint.x) !== null && _this9$currentPoint$x !== void 0 ? _this9$currentPoint$x : _this9._pointIndex;
+          _this9._visibleGroupIndex--;
+          _this9._announceCategoryChange();
+          _this9._cleanupAfterCategoryChange(currentX);
+          if (_this9._playOnCategoryChange && !_this9._silent) {
+            _this9._playCurrent();
           }
-          _this7._onFocus();
+          _this9._onFocus();
         },
         next_category: function next_category() {
-          _this7._clearPlay();
-          if (_this7._visibleGroupIndex === _this7._visible_group_indices.length - 1) {
+          _this9._clearPlay();
+          if (_this9._visibleGroupIndex === _this9._visible_group_indices.length - 1) {
             return;
           }
-          var currentX = _this7.currentPoint.x;
-          _this7._visibleGroupIndex++;
-          _this7._announceCategoryChange();
-          _this7._cleanupAfterCategoryChange(currentX);
-          if (_this7._playOnCategoryChange && !_this7._silent) {
-            _this7._playCurrent();
+          var currentX = _this9.currentPoint.x;
+          _this9._visibleGroupIndex++;
+          _this9._announceCategoryChange();
+          _this9._cleanupAfterCategoryChange(currentX);
+          if (_this9._playOnCategoryChange && !_this9._silent) {
+            _this9._playCurrent();
           }
-          _this7._onFocus();
+          _this9._onFocus();
         },
         first_category: function first_category() {
-          _this7._clearPlay();
-          _this7._visibleGroupIndex = 0;
-          _this7._playAndSpeak();
+          _this9._clearPlay();
+          _this9._visibleGroupIndex = 0;
+          _this9._playAndSpeak();
         },
         last_category: function last_category() {
-          _this7._clearPlay();
-          _this7._visibleGroupIndex = _this7._visible_group_indices.length - 1;
-          _this7._playAndSpeak();
+          _this9._clearPlay();
+          _this9._visibleGroupIndex = _this9._visible_group_indices.length - 1;
+          _this9._playAndSpeak();
         },
         first_point: function first_point() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._pointIndex = 0;
-          _this7._playAndSpeak();
+          _this9._pointIndex = 0;
+          _this9._playAndSpeak();
         },
         last_point: function last_point() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._pointIndex = _this7._currentDataRow.length - 1;
-          _this7._playAndSpeak();
+          _this9._pointIndex = _this9._currentDataRow.length - 1;
+          _this9._playAndSpeak();
         },
         replay: function replay() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._flagNewStat = true;
-          _this7._playAndSpeak();
+          _this9._flagNewStat = true;
+          _this9._playAndSpeak();
         },
         select: function select() {
-          var _this7$_options$onSel, _this7$_options;
-          if (!_this7._movementAvailable) {
+          var _this9$_options$onSel, _this9$_options;
+          if (!_this9._movementAvailable) {
             return;
           }
-          (_this7$_options$onSel = (_this7$_options = _this7._options).onSelectCallback) === null || _this7$_options$onSel === void 0 || _this7$_options$onSel.call(_this7$_options, {
-            slice: _this7._currentGroupName,
-            index: _this7._pointIndex,
-            point: _this7.currentPoint
+          (_this9$_options$onSel = (_this9$_options = _this9._options).onSelectCallback) === null || _this9$_options$onSel === void 0 || _this9$_options$onSel.call(_this9$_options, {
+            slice: _this9._currentGroupName,
+            index: _this9._pointIndex,
+            point: _this9.currentPoint
           });
         },
         previous_tenth: function previous_tenth() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._moveLeftTenths();
-          _this7._playAndSpeak();
+          _this9._moveLeftTenths();
+          _this9._playAndSpeak();
         },
         next_tenth: function next_tenth() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          _this7._moveRightTenths();
-          _this7._playAndSpeak();
+          _this9._moveRightTenths();
+          _this9._playAndSpeak();
         },
         go_minimum: function go_minimum() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          if (_this7._moveToMinimum()) {
-            _this7._playAndSpeak();
+          if (_this9._moveToMinimum()) {
+            _this9._playAndSpeak();
           }
         },
         go_maximum: function go_maximum() {
-          _this7._clearPlay();
-          if (!_this7._movementAvailable) {
+          _this9._clearPlay();
+          if (!_this9._movementAvailable) {
             return;
           }
-          if (_this7._moveToMaximum()) {
-            _this7._playAndSpeak();
+          if (_this9._moveToMaximum()) {
+            _this9._playAndSpeak();
           }
         },
         go_total_maximum: function go_total_maximum() {
-          _this7._clearPlay();
-          var winner = _this7._metadataByGroup.filter(function (g, index) {
-            return _this7._visible_group_indices.includes(index);
+          _this9._clearPlay();
+          var winner = _this9._metadataByGroup.filter(function (g, index) {
+            return _this9._visible_group_indices.includes(index);
           }).reduce(function (previousValue, currentValue) {
             return previousValue.maximumValue > currentValue.maximumValue ? previousValue : currentValue;
           });
           if (!winner) {
             return;
           }
-          _this7._visibleGroupIndex = _this7._visible_group_indices.indexOf(winner.index);
-          _this7._pointIndex = winner.maximumPointIndex;
-          _this7._playAndSpeak();
+          _this9._visibleGroupIndex = _this9._visible_group_indices.indexOf(winner.index);
+          _this9._pointIndex = winner.maximumPointIndex;
+          _this9._playAndSpeak();
         },
         go_total_minimum: function go_total_minimum() {
-          _this7._clearPlay();
-          var winner = _this7._metadataByGroup.filter(function (g, index) {
-            return _this7._visible_group_indices.includes(index);
+          _this9._clearPlay();
+          var winner = _this9._metadataByGroup.filter(function (g, index) {
+            return _this9._visible_group_indices.includes(index);
           }).reduce(function (previousValue, currentValue) {
             return previousValue.minimumValue < currentValue.minimumValue ? previousValue : currentValue;
           });
           if (!winner) {
             return;
           }
-          _this7._visibleGroupIndex = _this7._visible_group_indices.indexOf(winner.index);
-          _this7._pointIndex = winner.minimumPointIndex;
-          _this7._playAndSpeak();
+          _this9._visibleGroupIndex = _this9._visible_group_indices.indexOf(winner.index);
+          _this9._pointIndex = winner.minimumPointIndex;
+          _this9._playAndSpeak();
         },
         speed_up: function speed_up() {
-          _this7._clearPlay();
-          if (_this7._speedRateIndex < SPEEDS.length - 1) {
-            _this7._speedRateIndex++;
+          _this9._clearPlay();
+          if (_this9._speedRateIndex < SPEEDS.length - 1) {
+            _this9._speedRateIndex++;
           }
-          _this7._sr.render(_this7._translator.translate("kbr-speed", {
-            rate_in_ms: SPEEDS.at(_this7._speedRateIndex)
+          _this9._sr.render(_this9._translator.translate("kbr-speed", {
+            rate_in_ms: SPEEDS.at(_this9._speedRateIndex)
           }));
         },
         slow_down: function slow_down() {
-          _this7._clearPlay();
-          if (_this7._speedRateIndex > 0) {
-            _this7._speedRateIndex--;
+          _this9._clearPlay();
+          if (_this9._speedRateIndex > 0) {
+            _this9._speedRateIndex--;
           }
-          _this7._sr.render(_this7._translator.translate("kbr-speed", {
-            rate_in_ms: SPEEDS.at(_this7._speedRateIndex)
+          _this9._sr.render(_this9._translator.translate("kbr-speed", {
+            rate_in_ms: SPEEDS.at(_this9._speedRateIndex)
           }));
         },
         monitor: function monitor() {
-          if (!_this7._options.live) {
-            _this7._sr.render(_this7._translator.translate("kbr-not-live"));
+          if (!_this9._options.live) {
+            _this9._sr.render(_this9._translator.translate("kbr-not-live"));
             return;
           }
-          _this7._monitorMode = !_this7._monitorMode;
-          _this7._sr.render(_this7._translator.translate("monitoring", {
-            "switch": _this7._monitorMode
+          _this9._monitorMode = !_this9._monitorMode;
+          _this9._sr.render(_this9._translator.translate("monitoring", {
+            "switch": _this9._monitorMode
           }));
         },
         help: function help() {
-          _this7._clearPlay();
-          _this7._keyEventManager.launchHelpDialog(_this7._language, function (id, ev) {
-            return _this7._translator.translate(id, ev);
+          _this9._clearPlay();
+          _this9._keyEventManager.launchHelpDialog(_this9._language, function (id, ev) {
+            return _this9._translator.translate(id, ev);
           });
         },
         options: function options() {
-          _this7._checkAudioEngine();
-          launchOptionDialog(_objectSpread(_objectSpread({}, _this7._hertzClamps), {}, {
-            speedIndex: _this7._speedRateIndex,
-            continuousMode: _this7._xAxis.continuous,
-            labelPosition: _this7._announcePointLabelFirst,
-            language: _this7._language,
+          _this9._checkAudioEngine();
+          launchOptionDialog(_objectSpread(_objectSpread({}, _this9._hertzClamps), {}, {
+            speedIndex: _this9._speedRateIndex,
+            continuousMode: _this9._xAxis.continuous,
+            labelPosition: _this9._announcePointLabelFirst,
+            language: _this9._language,
             translationCallback: function translationCallback(id, ev) {
-              return _this7._translator.translate(id, ev);
+              return _this9._translator.translate(id, ev);
             }
           }), function (lowerIndex, upperIndex, speedIndex, continuousMode, labelPosition) {
-            _this7._setHertzClamps(lowerIndex, upperIndex);
-            if (_this7._speedRateIndex !== speedIndex) {
-              _this7._speedRateIndex = speedIndex;
-              _this7._sr.render(_this7._translator.translate("kbr-speed", {
-                rate_in_ms: SPEEDS.at(_this7._speedRateIndex)
+            _this9._setHertzClamps(lowerIndex, upperIndex);
+            if (_this9._speedRateIndex !== speedIndex) {
+              _this9._speedRateIndex = speedIndex;
+              _this9._sr.render(_this9._translator.translate("kbr-speed", {
+                rate_in_ms: SPEEDS.at(_this9._speedRateIndex)
               }));
             }
-            if (_this7._xAxis.continuous !== continuousMode) {
-              _this7._xAxis.continuous = continuousMode;
-              _this7._generateSummary();
+            if (_this9._xAxis.continuous !== continuousMode) {
+              _this9._xAxis.continuous = continuousMode;
+              _this9._generateSummary();
             }
-            _this7._announcePointLabelFirst = labelPosition;
+            _this9._announcePointLabelFirst = labelPosition;
           }, function (hertzIndex) {
-            var _this7$_audioEngine;
-            (_this7$_audioEngine = _this7._audioEngine) === null || _this7$_audioEngine === void 0 || _this7$_audioEngine.playDataPoint(_this7._options.hertzes.at(hertzIndex), 0, NOTE_LENGTH);
+            var _this9$_audioEngine;
+            (_this9$_audioEngine = _this9._audioEngine) === null || _this9$_audioEngine === void 0 || _this9$_audioEngine.playDataPoint(_this9._options.hertzes.at(hertzIndex), 0, NOTE_LENGTH);
           });
         },
         info: function info() {
-          launchInfoDialog(_this7._info, function (id, ev) {
-            return _this7._translator.translate(id, ev);
+          launchInfoDialog(_this9._info, function (id, ev) {
+            return _this9._translator.translate(id, ev);
           });
         }
       };
@@ -5992,7 +6053,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_generateSummary",
     value: function _generateSummary() {
-      var _this8 = this,
+      var _this0 = this,
         _this$_info;
       this._chartSummary = generateChartSummary({
         title: this._title,
@@ -6000,7 +6061,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         live: this._options.live,
         hierarchy: this._hierarchy,
         translationCallback: function translationCallback(code, evaluators) {
-          return _this8._translator.translate(code, evaluators);
+          return _this0._translator.translate(code, evaluators);
         }
       });
       this._instructions = generateInstructions({
@@ -6008,7 +6069,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         hierarchy: this._hierarchy,
         hasNotes: ((_this$_info = this._info) === null || _this$_info === void 0 || (_this$_info = _this$_info.notes) === null || _this$_info === void 0 ? void 0 : _this$_info.length) > 0,
         translationCallback: function translationCallback(code, evaluators) {
-          return _this8._translator.translate(code, evaluators);
+          return _this0._translator.translate(code, evaluators);
         }
       });
     }
@@ -6065,7 +6126,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         _axes$y,
         _this$_explicitAxes$y2,
         _axes$y2,
-        _this9 = this,
+        _this1 = this,
         _this$_info$annotatio;
       this._explicitAxes = {
         x: _objectSpread(_objectSpread({}, (_this$_explicitAxes$x = this._explicitAxes.x) !== null && _this$_explicitAxes$x !== void 0 ? _this$_explicitAxes$x : {}), (_axes$x = axes === null || axes === void 0 ? void 0 : axes.x) !== null && _axes$x !== void 0 ? _axes$x : {}),
@@ -6107,7 +6168,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       if (this._xAxis.continuous) {
         this._data.forEach(function (row, index) {
-          _this9._data[index] = row.sort(function (a, b) {
+          _this1._data[index] = row.sort(function (a, b) {
             if (a.x < b.x) {
               return -1;
             }
@@ -6147,14 +6208,14 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
               return g.x >= a.x;
             });
             if (index === -1) {
-              _this9._data[i].push(a);
+              _this1._data[i].push(a);
               return;
             }
             if (index === 0) {
-              _this9._data[i].unshift(a);
+              _this1._data[i].unshift(a);
               return;
             }
-            _this9._data[i].splice(index, 0, a);
+            _this1._data[i].splice(index, 0, a);
           });
         });
       }
@@ -6183,7 +6244,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "setCategoryVisibility",
     value: function setCategoryVisibility(name, state) {
-      var _this0 = this;
+      var _this10 = this;
       var groupIndex = this._groups.indexOf(name);
       if (groupIndex === -1) {
         return "Unknown group named \"".concat(name, "\". Available groups are: \"").concat(this._groups.join('", "'), "\".");
@@ -6210,7 +6271,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       if (this._options.stack && this._groups[0] === "All") {
         this._data[0] = this._createFrequencyTable(function (row, rowIndex) {
-          return rowIndex !== 0 && _this0._visible_group_indices.includes(rowIndex);
+          return rowIndex !== 0 && _this10._visible_group_indices.includes(rowIndex);
         });
       }
       if (this._visibleGroupIndex >= this._visible_group_indices.length) {
@@ -6241,7 +6302,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_shrinkToMaxWidth",
     value: function _shrinkToMaxWidth() {
-      var _this1 = this;
+      var _this11 = this;
       if (typeof this._options.maxWidth === "undefined") {
         return;
       }
@@ -6249,22 +6310,22 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         recalculateY = false,
         recalculateY2 = false;
       var _loop2 = function _loop2(i) {
-        if (_this1._data[i].length <= _this1._options.maxWidth) {
+        if (_this11._data[i].length <= _this11._options.maxWidth) {
           return 1; // continue
         }
-        var tmp = _this1._data[i].shift();
-        _this1._pointIndex--;
-        if (_this1._xAxis.minimum === tmp.x || _this1._xAxis.maximum === tmp.x) {
+        var tmp = _this11._data[i].shift();
+        _this11._pointIndex--;
+        if (_this11._xAxis.minimum === tmp.x || _this11._xAxis.maximum === tmp.x) {
           recalculateX = true;
         }
         recalculateY = true;
         if (isAlternateAxisDataPoint(tmp)) {
           recalculateY2 = true;
         }
-        var targetType = _this1._metadataByGroup[i].inputType;
+        var targetType = _this11._metadataByGroup[i].inputType;
         if (targetType === "number") {
-          _this1._data[i].forEach(function (item, index) {
-            _this1._data[i][index].x = index;
+          _this11._data[i].forEach(function (item, index) {
+            _this11._data[i][index].x = index;
           });
         }
       };
@@ -6353,7 +6414,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
     key: "_initializeKeyActionMap",
     value: function _initializeKeyActionMap() {
       var _this$_info$notes,
-        _this10 = this,
+        _this12 = this,
         _this$_options$custom;
       this._keyEventManager = new KeyboardEventManager(this._chartElement, this._options.modifyHelpDialogText, this._options.modifyHelpDialogKeyboardListing);
       this._keyEventManager.registerKeyEvents([{
@@ -6545,13 +6606,13 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       var hotkeyCallbackWrapper = function hotkeyCallbackWrapper(cb) {
         cb({
-          slice: _this10._currentGroupName,
-          index: _this10._pointIndex,
-          point: _this10.currentPoint
+          slice: _this12._currentGroupName,
+          index: _this12._pointIndex,
+          point: _this12.currentPoint
         });
       };
       (_this$_options$custom = this._options.customHotkeys) === null || _this$_options$custom === void 0 || _this$_options$custom.forEach(function (hotkey) {
-        _this10._keyEventManager.registerKeyEvent(_objectSpread(_objectSpread({}, hotkey), {}, {
+        _this12._keyEventManager.registerKeyEvent(_objectSpread(_objectSpread({}, hotkey), {}, {
           key: keyboardEventToString(hotkey.key),
           callback: function callback() {
             hotkeyCallbackWrapper(hotkey.callback);
@@ -6559,7 +6620,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         }));
       });
       this._cleanUpTasks.push(function () {
-        _this10._keyEventManager.cleanup();
+        _this12._keyEventManager.cleanup();
       });
     }
   }, {
@@ -6588,7 +6649,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "generateGroupSummary",
     value: function generateGroupSummary() {
-      var _this11 = this;
+      var _this13 = this;
       if (this._currentGroupType === "unsupported") {
         return this._translator.translate("group-unknown", {
           title: this._currentGroupName
@@ -6604,19 +6665,19 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         axisLetter: "x",
         axis: this._xAxis,
         translationCallback: function translationCallback(code, evaluators) {
-          return _this11._translator.translate(code, evaluators);
+          return _this13._translator.translate(code, evaluators);
         }
       }), isAlternateAxisDataPoint(this.currentPoint) ? generateAxisSummary({
         axisLetter: "y2",
         axis: this._y2Axis,
         translationCallback: function translationCallback(code, evaluators) {
-          return _this11._translator.translate(code, evaluators);
+          return _this13._translator.translate(code, evaluators);
         }
       }) : generateAxisSummary({
         axisLetter: "y",
         axis: this._yAxis,
         translationCallback: function translationCallback(code, evaluators) {
-          return _this11._translator.translate(code, evaluators);
+          return _this13._translator.translate(code, evaluators);
         }
       })];
       return text.join(" ");
@@ -6624,68 +6685,91 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_startListening",
     value: function _startListening() {
-      var _this12 = this;
+      var _this14 = this;
       var focusEvent = function focusEvent() {
         var _window$__chart2music;
-        _this12._sr.clear();
-        if (_this12._options.live) {
-          _this12._generateSummary();
+        _this14._sr.clear();
+        if (_this14._options.live) {
+          _this14._generateSummary();
         }
-        if (_this12._options.enableSpeech) {
-          _this12._sr.render(_this12._chartSummary + " " + _this12.generateGroupSummary() + " " + _this12._instructions);
+        if (_this14._options.enableSpeech) {
+          _this14._sr.render(_this14._chartSummary + " " + _this14.generateGroupSummary() + " " + _this14._instructions);
         }
         if ((_window$__chart2music = window.__chart2music_options__) !== null && _window$__chart2music !== void 0 && _window$__chart2music._hertzClamps) {
           var _window$__chart2music2 = window.__chart2music_options__._hertzClamps,
             lower = _window$__chart2music2.lower,
             upper = _window$__chart2music2.upper;
-          _this12._setHertzClamps(lower, upper);
+          _this14._setHertzClamps(lower, upper);
         }
-        _this12._onFocus();
+        _this14._onFocus();
       };
       var blurEvent = function blurEvent() {
-        _this12._monitorMode = false;
+        _this14._monitorMode = false;
+        _this14._keysDown.clear();
+        _this14._speakOnKeyRelease = null;
+      };
+      var keydownEvent = function keydownEvent(event) {
+        _this14._keysDown.add(event.code || event.key);
+      };
+      var keyupEvent = function keyupEvent(event) {
+        _this14._keyupSeen = true;
+        if (event.key === "Meta") {
+          _this14._keysDown.clear();
+        } else {
+          _this14._keysDown["delete"](event.code || event.key);
+        }
+        if (_this14._keysDown.size === 0 && _this14._speakOnKeyRelease) {
+          _this14._speakAfterTone(_this14._speakOnKeyRelease);
+        }
       };
       this._chartElement.addEventListener("focus", focusEvent);
       this._chartElement.addEventListener("blur", blurEvent);
+      this._chartElement.addEventListener("keydown", keydownEvent);
+      this._chartElement.addEventListener("keyup", keyupEvent);
       this._cleanUpTasks.push(function () {
-        _this12._chartElement.removeEventListener("focus", focusEvent);
-        _this12._chartElement.removeEventListener("blur", blurEvent);
+        _this14._chartElement.removeEventListener("focus", focusEvent);
+        _this14._chartElement.removeEventListener("blur", blurEvent);
+        _this14._chartElement.removeEventListener("keydown", keydownEvent);
+        _this14._chartElement.removeEventListener("keyup", keyupEvent);
       });
     }
   }, {
     key: "_announceCategoryChange",
     value: function _announceCategoryChange() {
+      var _this15 = this;
       if (this._silent) {
         return;
       }
-      var message = this.generateGroupSummary();
-      if (this._playOnCategoryChange) {
-        message += ". " + this._generateCurrentPointDescription();
-      }
-      this._sr.render(message);
+      this._speakAfterTone(function () {
+        var message = _this15.generateGroupSummary();
+        if (_this15._playOnCategoryChange) {
+          message += ". " + _this15._generateCurrentPointDescription();
+        }
+        _this15._sr.render(message);
+      });
     }
   }, {
     key: "_generateCurrentPointDescription",
     value: function _generateCurrentPointDescription() {
-      var _this13 = this;
+      var _this16 = this;
       var current = this.currentPoint;
       var _this$_metadataByGrou3 = this._metadataByGroup.at(this._groupIndex),
         statIndex = _this$_metadataByGrou3.statIndex,
         availableStats = _this$_metadataByGrou3.availableStats;
       return generatePointDescription({
         translationCallback: function translationCallback(code, evaluators) {
-          return _this13._translator.translate(code, evaluators);
+          return _this16._translator.translate(code, evaluators);
         },
         point: current,
         xFormat: formatWrapper({
           axis: this._xAxis,
           translationCallback: function translationCallback(code, evaluators) {
-            return _this13._translator.translate(code, evaluators);
+            return _this16._translator.translate(code, evaluators);
           }
         }),
         yFormat: formatWrapper({
           translationCallback: function translationCallback(code, evaluators) {
-            return _this13._translator.translate(code, evaluators);
+            return _this16._translator.translate(code, evaluators);
           },
           axis: isAlternateAxisDataPoint(current) ? this._y2Axis : this._yAxis
         }),
@@ -6699,14 +6783,14 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playAndSpeak",
     value: function _playAndSpeak() {
-      var _this14 = this;
+      var _this17 = this;
       if (this._silent) {
         return;
       }
       this._playCurrent();
-      setTimeout(function () {
-        _this14._speakCurrent(_this14.currentPoint);
-      }, NOTE_LENGTH * 1000);
+      this._speakAfterTone(function () {
+        _this17._speakCurrent(_this17.currentPoint);
+      });
     }
   }, {
     key: "_moveNextOutlier",
@@ -6861,15 +6945,15 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playLeftOutlier",
     value: function _playLeftOutlier() {
-      var _this15 = this;
+      var _this18 = this;
       var min = 0;
       this._playListInterval = setInterval(function () {
-        if (_this15._outlierIndex <= min) {
-          _this15._outlierIndex = min;
-          _this15._clearPlay();
+        if (_this18._outlierIndex <= min) {
+          _this18._outlierIndex = min;
+          _this18._clearPlay();
         } else {
-          _this15._outlierIndex--;
-          _this15._playCurrent();
+          _this18._outlierIndex--;
+          _this18._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6877,7 +6961,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playLeft",
     value: function _playLeft() {
-      var _this16 = this;
+      var _this19 = this;
       if (this._outlierMode) {
         this._playLeftOutlier();
         return;
@@ -6888,12 +6972,12 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       var min = 0;
       this._playListInterval = setInterval(function () {
-        if (_this16._pointIndex <= min) {
-          _this16._pointIndex = min;
-          _this16._clearPlay();
+        if (_this19._pointIndex <= min) {
+          _this19._pointIndex = min;
+          _this19._clearPlay();
         } else {
-          _this16._pointIndex--;
-          _this16._playCurrent();
+          _this19._pointIndex--;
+          _this19._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6902,18 +6986,18 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
     key: "_playRightOutlier",
     value: function _playRightOutlier() {
       var _this$currentPoint$ou,
-        _this17 = this;
+        _this20 = this;
       if (!(isBoxDataPoint(this.currentPoint) && "outlier" in this.currentPoint)) {
         return;
       }
       var max = ((_this$currentPoint$ou = this.currentPoint.outlier) === null || _this$currentPoint$ou === void 0 ? void 0 : _this$currentPoint$ou.length) - 1;
       this._playListInterval = setInterval(function () {
-        if (_this17._outlierIndex >= max) {
-          _this17._outlierIndex = max;
-          _this17._clearPlay();
+        if (_this20._outlierIndex >= max) {
+          _this20._outlierIndex = max;
+          _this20._clearPlay();
         } else {
-          _this17._outlierIndex++;
-          _this17._playCurrent();
+          _this20._outlierIndex++;
+          _this20._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -6921,7 +7005,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playRightContinuous",
     value: function _playRightContinuous() {
-      var _this18 = this;
+      var _this21 = this;
       var startIndex = this._pointIndex;
       var startX = this.getCurrent().point.x;
       var row = this._currentDataRow.slice(startIndex);
@@ -6935,16 +7019,16 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       };
       var startingPct = change(startX);
       row.forEach(function (item, index) {
-        _this18._playListContinuous.push(setTimeout(function () {
-          _this18._pointIndex = startIndex + index;
-          _this18._playCurrent();
+        _this21._playListContinuous.push(setTimeout(function () {
+          _this21._pointIndex = startIndex + index;
+          _this21._playCurrent();
         }, (change(item.x) - startingPct) * totalTime));
       });
     }
   }, {
     key: "_playLeftContinuous",
     value: function _playLeftContinuous() {
-      var _this19 = this;
+      var _this22 = this;
       var startIndex = this._pointIndex;
       var startX = this.getCurrent().point.x;
       var row = this._currentDataRow.slice(0, startIndex + 1);
@@ -6958,16 +7042,16 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       };
       var startingPct = change(startX);
       row.reverse().forEach(function (item, index) {
-        _this19._playListContinuous.push(setTimeout(function () {
-          _this19._pointIndex = startIndex - index;
-          _this19._playCurrent();
+        _this22._playListContinuous.push(setTimeout(function () {
+          _this22._pointIndex = startIndex - index;
+          _this22._playCurrent();
         }, (change(item.x) - startingPct) * totalTime));
       });
     }
   }, {
     key: "_playRight",
     value: function _playRight() {
-      var _this20 = this;
+      var _this23 = this;
       if (this._outlierMode) {
         this._playRightOutlier();
         return;
@@ -6978,12 +7062,12 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
       }
       var max = this._currentDataRow.length - 1;
       this._playListInterval = setInterval(function () {
-        if (_this20._pointIndex >= max) {
-          _this20._pointIndex = max;
-          _this20._clearPlay();
+        if (_this23._pointIndex >= max) {
+          _this23._pointIndex = max;
+          _this23._clearPlay();
         } else {
-          _this20._pointIndex++;
-          _this20._playCurrent();
+          _this23._pointIndex++;
+          _this23._playCurrent();
         }
       }, SPEEDS.at(this._speedRateIndex));
       this._playCurrent();
@@ -7083,7 +7167,7 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
   }, {
     key: "_playDataPoint",
     value: function _playDataPoint(current, statIndex, availableStats) {
-      var _this21 = this;
+      var _this24 = this;
       this._checkAudioEngine();
       if (!this._audioEngine) {
         return;
@@ -7154,19 +7238,19 @@ var c2m = exports.c2m = /*#__PURE__*/function () {
         }
         var interval = 1 / (availableStats.length + 1);
         availableStats.forEach(function (stat, index) {
-          if (isUnplayable(current[stat], _this21._yAxis) || stat === "outlier") {
+          if (isUnplayable(current[stat], _this24._yAxis) || stat === "outlier") {
             return;
           }
           var yBin = interpolateBin({
             point: current[stat],
-            min: _this21._yAxis.minimum,
-            max: _this21._yAxis.maximum,
+            min: _this24._yAxis.minimum,
+            max: _this24._yAxis.maximum,
             bins: hertzes.length - 1,
-            scale: _this21._yAxis.type
+            scale: _this24._yAxis.type
           });
           setTimeout(function () {
-            _this21._audioEngine.playDataPoint(hertzes[yBin], xPan, NOTE_LENGTH);
-          }, SPEEDS.at(_this21._speedRateIndex) * interval * index);
+            _this24._audioEngine.playDataPoint(hertzes[yBin], xPan, NOTE_LENGTH);
+          }, SPEEDS.at(_this24._speedRateIndex) * interval * index);
         });
       }
     }

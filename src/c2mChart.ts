@@ -1,6 +1,11 @@
 import { OscillatorAudioEngine } from "./audio/index";
 import type { AudioEngine } from "./audio/index";
-import { HERTZ, NOTE_LENGTH, SPEEDS } from "./constants";
+import {
+    HELD_KEY_SPEECH_FALLBACK,
+    HERTZ,
+    NOTE_LENGTH,
+    SPEEDS
+} from "./constants";
 import { KeyboardEventManager, keyboardEventToString } from "./keyboardManager";
 import { ScreenReaderBridge } from "./ScreenReaderBridge";
 import type {
@@ -153,6 +158,11 @@ export class c2m {
     private _title: string;
     private _playListInterval: NodeJS.Timeout | null = null;
     private _playListContinuous: NodeJS.Timeout[] = [];
+    private _speakTimeout: NodeJS.Timeout | null = null;
+    private _keysDown = new Set<string>();
+    private _keyupSeen = false;
+    private _speakOnKeyRelease: (() => void) | null = null;
+    private _pendingSpeech: (() => void) | null = null;
     private _speedRateIndex = 1;
     private _flagNewLevel = false;
     private _flagNewStat = false;
@@ -283,7 +293,9 @@ export class c2m {
             return;
         }
 
-        this._availableActions = this._initializeActionMap();
+        this._availableActions = this._keepSpeechWhenNavigationFails(
+            this._initializeActionMap()
+        );
 
         this._initializeKeyActionMap();
         this._startListening();
@@ -367,6 +379,100 @@ export class c2m {
             clearTimeout(item);
         });
         this._playListContinuous = [];
+        this._cancelPendingSpeech();
+    }
+
+    /**
+     * Cancel speech that was scheduled but hasn't started yet
+     */
+    private _cancelPendingSpeech() {
+        if (this._speakTimeout !== null) {
+            clearTimeout(this._speakTimeout);
+            this._speakTimeout = null;
+        }
+        this._speakOnKeyRelease = null;
+        this._pendingSpeech = null;
+    }
+
+    /**
+     * Speak once the tone has finished and navigation has paused.
+     * Each call cancels the previous pending speech, so moving quickly through the chart plays only tones, and
+     * only the point you stop on is spoken. (Speech already in progress can't be stopped silently; it's cut off
+     * by the next announcement.) While a key is held down (auto-repeat),
+     * speech waits until it's released, since the OS's delay before repeating can be longer than the tone.
+     * @param speak - generates and renders the text; called when the delay elapses, so it describes the current state
+     */
+    private _speakAfterTone(speak: () => void) {
+        this._cancelPendingSpeech();
+        this._pendingSpeech = speak;
+        const run = () => {
+            this._pendingSpeech = null;
+            speak();
+        };
+        this._speakTimeout = setTimeout(() => {
+            this._speakTimeout = null;
+            // Only wait for a key release once this environment has shown it sends them, so a missing keyup
+            // (synthetic events, some assistive tech) can never silence speech
+            if (this._keyupSeen && this._keysDown.size > 0) {
+                this._speakOnKeyRelease = speak;
+                // Fallback in case the release never arrives; repeats and releases cancel or replace this
+                this._speakTimeout = setTimeout(() => {
+                    this._speakTimeout = null;
+                    this._speakOnKeyRelease = null;
+                    this._keysDown.clear();
+                    run();
+                }, HELD_KEY_SPEECH_FALLBACK);
+                return;
+            }
+            run();
+        }, NOTE_LENGTH * 1000);
+    }
+
+    /**
+     * Navigation actions cancel pending speech before trying to move. When one can't move (for example, an
+     * auto-repeating key that has reached the end of the data), put back the speech it cancelled, so the point
+     * you stopped on is still announced. Actions that announce something themselves are left alone.
+     * @param actions - the action map
+     */
+    private _keepSpeechWhenNavigationFails(actions: {
+        [key in ActionSet]: () => void;
+    }) {
+        const navigationActions: ActionSet[] = [
+            ActionSet.NEXT_POINT,
+            ActionSet.PREVIOUS_POINT,
+            ActionSet.DRILL_DOWN,
+            ActionSet.DRILL_UP,
+            ActionSet.GO_TO_ROOT,
+            ActionSet.PREVIOUS_STAT,
+            ActionSet.NEXT_STAT,
+            ActionSet.PREVIOUS_CATEGORY,
+            ActionSet.NEXT_CATEGORY,
+            ActionSet.FIRST_CATEGORY,
+            ActionSet.LAST_CATEGORY,
+            ActionSet.FIRST_POINT,
+            ActionSet.LAST_POINT,
+            ActionSet.PREVIOUS_TENTH,
+            ActionSet.NEXT_TENTH,
+            ActionSet.GO_MINIMUM,
+            ActionSet.GO_MAXIMUM,
+            ActionSet.GO_TOTAL_MAXIMUM,
+            ActionSet.GO_TOTAL_MINIMUM
+        ];
+        navigationActions.forEach((name) => {
+            const action = actions[name];
+            actions[name] = () => {
+                const pending = this._pendingSpeech;
+                const lastAnnouncement = this._sr.lastCreatedElement;
+                action();
+                const nothingNew =
+                    this._pendingSpeech === null &&
+                    this._sr.lastCreatedElement === lastAnnouncement;
+                if (pending && nothingNew) {
+                    this._speakAfterTone(pending);
+                }
+            };
+        });
+        return actions;
     }
 
     /**
@@ -1671,12 +1777,35 @@ export class c2m {
         };
         const blurEvent = () => {
             this._monitorMode = false;
+            this._keysDown.clear();
+            this._speakOnKeyRelease = null;
+        };
+        // Track held keys so speech can wait for a held (auto-repeating) key to be released
+        const keydownEvent = (event: KeyboardEvent) => {
+            this._keysDown.add(event.code || event.key);
+        };
+        const keyupEvent = (event: KeyboardEvent) => {
+            this._keyupSeen = true;
+            // macOS doesn't send keyup for other keys while Command is held, so releasing Command clears them all
+            if (event.key === "Meta") {
+                this._keysDown.clear();
+            } else {
+                this._keysDown.delete(event.code || event.key);
+            }
+            if (this._keysDown.size === 0 && this._speakOnKeyRelease) {
+                // Clears the fallback timer and schedules speech for after the release
+                this._speakAfterTone(this._speakOnKeyRelease);
+            }
         };
         this._chartElement.addEventListener("focus", focusEvent);
         this._chartElement.addEventListener("blur", blurEvent);
+        this._chartElement.addEventListener("keydown", keydownEvent);
+        this._chartElement.addEventListener("keyup", keyupEvent);
         this._cleanUpTasks.push(() => {
             this._chartElement.removeEventListener("focus", focusEvent);
             this._chartElement.removeEventListener("blur", blurEvent);
+            this._chartElement.removeEventListener("keydown", keydownEvent);
+            this._chartElement.removeEventListener("keyup", keyupEvent);
         });
     }
 
@@ -1688,14 +1817,17 @@ export class c2m {
             return;
         }
 
-        let message = this.generateGroupSummary();
+        // Built when spoken, so it describes the point after the category change has been applied
+        this._speakAfterTone(() => {
+            let message = this.generateGroupSummary();
 
-        // If playOnCategoryChange is enabled, append the point description
-        if (this._playOnCategoryChange) {
-            message += ". " + this._generateCurrentPointDescription();
-        }
+            // If playOnCategoryChange is enabled, append the point description
+            if (this._playOnCategoryChange) {
+                message += ". " + this._generateCurrentPointDescription();
+            }
 
-        this._sr.render(message);
+            this._sr.render(message);
+        });
     }
 
     /**
@@ -1744,9 +1876,9 @@ export class c2m {
 
         this._playCurrent();
 
-        setTimeout(() => {
+        this._speakAfterTone(() => {
             this._speakCurrent(this.currentPoint);
-        }, NOTE_LENGTH * 1000);
+        });
     }
 
     /**

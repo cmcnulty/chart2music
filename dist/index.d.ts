@@ -163,6 +163,11 @@ declare class c2m {
     private _title;
     private _playListInterval;
     private _playListContinuous;
+    private _speakTimeout;
+    private _keysDown;
+    private _keyupSeen;
+    private _speakOnKeyRelease;
+    private _pendingSpeech;
     private _speedRateIndex;
     private _flagNewLevel;
     private _flagNewStat;
@@ -198,6 +203,9 @@ declare class c2m {
     get currentPoint(): SupportedDataPointType;
     private get _currentGroupName();
     private _clearPlay;
+    private _cancelPendingSpeech;
+    private _speakAfterTone;
+    private _keepSpeechWhenNavigationFails;
     private _initializeActionMap;
     private _cleanupAfterCategoryChange;
     private _generateSummary;

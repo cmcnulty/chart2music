@@ -16,6 +16,8 @@ export const HERTZ = [
 export const SPEEDS = [1000, 250, 100, 50, 25];
 
 export const NOTE_LENGTH = 0.25;
+// If a key seems held but neither repeats nor is released for this long (ms), speak anyway
+export const HELD_KEY_SPEECH_FALLBACK = 1000;
 
 /**
  * If multiple stats are provided, this determines the order that they should be read in.

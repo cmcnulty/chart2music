@@ -128,6 +128,7 @@ const HERTZ = [
 ];
 const SPEEDS = [1000, 250, 100, 50, 25];
 const NOTE_LENGTH = 0.25;
+const HELD_KEY_SPEECH_FALLBACK = 1000;
 
 const keyboardEventToString = (e) => {
     return `${e.altKey ? "Alt+" : ""}${e.ctrlKey ? "Ctrl+" : ""}${e.shiftKey ? "Shift+" : ""}${e.key}`;
@@ -5278,8 +5279,8 @@ function formatListToParts(_a, getListFormat, values, options) {
     var filteredOptions = filterProps(options, LIST_FORMAT_OPTIONS);
     try {
         var richValues_1 = {};
-        var serializedValues = values.map(function (v, i) {
-            if (typeof v === 'object') {
+        var serializedValues = Array.from(values).map(function (v, i) {
+            if (typeof v === 'object' && v !== null) {
                 var id = generateToken(i);
                 richValues_1[id] = v;
                 return id;
@@ -7001,6 +7002,11 @@ class c2m {
         this._pointIndex = 0;
         this._playListInterval = null;
         this._playListContinuous = [];
+        this._speakTimeout = null;
+        this._keysDown = new Set();
+        this._keyupSeen = false;
+        this._speakOnKeyRelease = null;
+        this._pendingSpeech = null;
         this._speedRateIndex = 1;
         this._flagNewLevel = false;
         this._flagNewStat = false;
@@ -7090,7 +7096,7 @@ class c2m {
         if (detectIfMobile()) {
             return;
         }
-        this._availableActions = this._initializeActionMap();
+        this._availableActions = this._keepSpeechWhenNavigationFails(this._initializeActionMap());
         this._initializeKeyActionMap();
         this._startListening();
     }
@@ -7135,6 +7141,74 @@ class c2m {
             clearTimeout(item);
         });
         this._playListContinuous = [];
+        this._cancelPendingSpeech();
+    }
+    _cancelPendingSpeech() {
+        if (this._speakTimeout !== null) {
+            clearTimeout(this._speakTimeout);
+            this._speakTimeout = null;
+        }
+        this._speakOnKeyRelease = null;
+        this._pendingSpeech = null;
+    }
+    _speakAfterTone(speak) {
+        this._cancelPendingSpeech();
+        this._pendingSpeech = speak;
+        const run = () => {
+            this._pendingSpeech = null;
+            speak();
+        };
+        this._speakTimeout = setTimeout(() => {
+            this._speakTimeout = null;
+            if (this._keyupSeen && this._keysDown.size > 0) {
+                this._speakOnKeyRelease = speak;
+                this._speakTimeout = setTimeout(() => {
+                    this._speakTimeout = null;
+                    this._speakOnKeyRelease = null;
+                    this._keysDown.clear();
+                    run();
+                }, HELD_KEY_SPEECH_FALLBACK);
+                return;
+            }
+            run();
+        }, NOTE_LENGTH * 1000);
+    }
+    _keepSpeechWhenNavigationFails(actions) {
+        const navigationActions = [
+            ActionSet.NEXT_POINT,
+            ActionSet.PREVIOUS_POINT,
+            ActionSet.DRILL_DOWN,
+            ActionSet.DRILL_UP,
+            ActionSet.GO_TO_ROOT,
+            ActionSet.PREVIOUS_STAT,
+            ActionSet.NEXT_STAT,
+            ActionSet.PREVIOUS_CATEGORY,
+            ActionSet.NEXT_CATEGORY,
+            ActionSet.FIRST_CATEGORY,
+            ActionSet.LAST_CATEGORY,
+            ActionSet.FIRST_POINT,
+            ActionSet.LAST_POINT,
+            ActionSet.PREVIOUS_TENTH,
+            ActionSet.NEXT_TENTH,
+            ActionSet.GO_MINIMUM,
+            ActionSet.GO_MAXIMUM,
+            ActionSet.GO_TOTAL_MAXIMUM,
+            ActionSet.GO_TOTAL_MINIMUM
+        ];
+        navigationActions.forEach((name) => {
+            const action = actions[name];
+            actions[name] = () => {
+                const pending = this._pendingSpeech;
+                const lastAnnouncement = this._sr.lastCreatedElement;
+                action();
+                const nothingNew = this._pendingSpeech === null &&
+                    this._sr.lastCreatedElement === lastAnnouncement;
+                if (pending && nothingNew) {
+                    this._speakAfterTone(pending);
+                }
+            };
+        });
+        return actions;
     }
     _initializeActionMap() {
         return {
@@ -8115,23 +8189,46 @@ class c2m {
         };
         const blurEvent = () => {
             this._monitorMode = false;
+            this._keysDown.clear();
+            this._speakOnKeyRelease = null;
+        };
+        const keydownEvent = (event) => {
+            this._keysDown.add(event.code || event.key);
+        };
+        const keyupEvent = (event) => {
+            this._keyupSeen = true;
+            if (event.key === "Meta") {
+                this._keysDown.clear();
+            }
+            else {
+                this._keysDown.delete(event.code || event.key);
+            }
+            if (this._keysDown.size === 0 && this._speakOnKeyRelease) {
+                this._speakAfterTone(this._speakOnKeyRelease);
+            }
         };
         this._chartElement.addEventListener("focus", focusEvent);
         this._chartElement.addEventListener("blur", blurEvent);
+        this._chartElement.addEventListener("keydown", keydownEvent);
+        this._chartElement.addEventListener("keyup", keyupEvent);
         this._cleanUpTasks.push(() => {
             this._chartElement.removeEventListener("focus", focusEvent);
             this._chartElement.removeEventListener("blur", blurEvent);
+            this._chartElement.removeEventListener("keydown", keydownEvent);
+            this._chartElement.removeEventListener("keyup", keyupEvent);
         });
     }
     _announceCategoryChange() {
         if (this._silent) {
             return;
         }
-        let message = this.generateGroupSummary();
-        if (this._playOnCategoryChange) {
-            message += ". " + this._generateCurrentPointDescription();
-        }
-        this._sr.render(message);
+        this._speakAfterTone(() => {
+            let message = this.generateGroupSummary();
+            if (this._playOnCategoryChange) {
+                message += ". " + this._generateCurrentPointDescription();
+            }
+            this._sr.render(message);
+        });
     }
     _generateCurrentPointDescription() {
         const current = this.currentPoint;
@@ -8167,9 +8264,9 @@ class c2m {
             return;
         }
         this._playCurrent();
-        setTimeout(() => {
+        this._speakAfterTone(() => {
             this._speakCurrent(this.currentPoint);
-        }, NOTE_LENGTH * 1000);
+        });
     }
     _moveNextOutlier() {
         if (isBoxDataPoint(this.currentPoint) &&
